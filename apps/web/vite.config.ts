@@ -4,6 +4,8 @@ import path from 'node:path'
 
 export default defineConfig({
   plugins: [react()],
+  // GitHub Pages serves project sites from /<repository>/ rather than /.
+  base: process.env.GITHUB_ACTIONS ? '/Vendora_ecom/' : '/',
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src')
