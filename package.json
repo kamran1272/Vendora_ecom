@@ -1,0 +1,24 @@
+{
+  "name": "vendora-ecommerce",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n web,api,seller,admin -c cyan,magenta,green,blue \"npm run dev --workspace @vendora/web\" \"npm run dev --workspace @vendora/api\" \"npm run dev --workspace @vendora/seller-panel\" \"npm run dev --workspace @vendora/admin-panel\"",
+    "dev:web": "npm run dev --workspace @vendora/web",
+    "dev:api": "npm run dev --workspace @vendora/api",
+    "dev:seller": "npm run dev --workspace @vendora/seller-panel",
+    "dev:admin": "npm run dev --workspace @vendora/admin-panel",
+    "start:api": "npm run start --workspace @vendora/api",
+    "start:web": "npm run dev --workspace @vendora/web",
+    "start:all": "concurrently -n web,api -c cyan,magenta \"npm run start:web\" \"npm run start:api\"",
+    "build": "npm run build --workspace @vendora/shared && npm run build --workspace @vendora/web && npm run build --workspace @vendora/seller-panel && npm run build --workspace @vendora/admin-panel && npm run build --workspace @vendora/api",
+    "lint": "npm run lint --workspace @vendora/web && npm run lint --workspace @vendora/api"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.1"
+  }
+}

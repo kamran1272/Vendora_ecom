@@ -1,0 +1,145 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  password  String
+  role      String   @default("CUSTOMER")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sellerProfile    Seller?
+  sellerApplications SellerApplication[]
+
+  @@map("users")
+}
+
+model Seller {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status    String   @default("PENDING")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  shop              Shop?
+  sellerApplications SellerApplication[]
+  subscription      SellerSubscription?
+  sellerProducts    SellerProduct[]
+
+  @@map("sellers")
+}
+
+model SellerApplication {
+  id                   String   @id @default(uuid())
+  userId               String?
+  user                 User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  sellerId             String?
+  seller               Seller?  @relation(fields: [sellerId], references: [id], onDelete: SetNull)
+  applicantName        String
+  email                String
+  phone                String
+  shopName             String
+  certificateType      String   @default("id_card")
+  certificateFront     String?
+  certificateBack      String?
+  invitationCode       String?
+  status               String   @default("PENDING")
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@map("seller_applications")
+}
+
+model Shop {
+  id          String   @id @default(uuid())
+  name        String
+  slug        String   @unique
+  logo        String?
+  banner      String?
+  description String?
+  sellerId    String   @unique
+  seller      Seller   @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("shops")
+}
+
+model WarehouseProduct {
+  id              String          @id @default(uuid())
+  name            String
+  description     String?
+  sku             String          @unique
+  barcode         String?
+  images          String          @default("[]")
+  category        String?
+  brand           String?
+  basePrice       Float
+  sellerMargin    Float           @default(0)
+  stock           Int             @default(0)
+  status          String          @default("PUBLISHED")
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  sellerProducts  SellerProduct[]
+
+  @@index([status, createdAt])
+  @@index([category])
+  @@index([brand])
+  @@map("warehouse_products")
+}
+
+model SellerProduct {
+  id                 String          @id @default(uuid())
+  sellerId           String
+  shopId             String?
+  warehouseProductId String
+  sellingPrice       Float
+  status             String          @default("ACTIVE")
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+  warehouseProduct   WarehouseProduct @relation(fields: [warehouseProductId], references: [id], onDelete: Restrict)
+  seller             Seller           @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+
+  @@unique([sellerId, warehouseProductId])
+  @@index([sellerId, createdAt])
+  @@index([shopId])
+  @@map("seller_products")
+}
+
+model SubscriptionPlan {
+  id          String               @id @default(uuid())
+  name        String               @unique
+  price       Float                @default(0)
+  productLimit Int
+  duration    Int                  @default(30)
+  features    String               @default("[]")
+  status      String               @default("ACTIVE")
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+  subscriptions SellerSubscription[]
+
+  @@map("subscription_plans")
+}
+
+model SellerSubscription {
+  id        String           @id @default(uuid())
+  sellerId  String           @unique
+  planId    String
+  startsAt  DateTime         @default(now())
+  expiresAt DateTime?
+  status    String           @default("ACTIVE")
+  seller    Seller           @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  plan      SubscriptionPlan @relation(fields: [planId], references: [id], onDelete: Restrict)
+
+  @@index([planId, status])
+  @@map("seller_subscriptions")
+}

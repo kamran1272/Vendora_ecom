@@ -1,0 +1,10 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./packages/shared" },
+    { "path": "./apps/web" },
+    { "path": "./apps/seller-panel" },
+    { "path": "./apps/admin-panel" },
+    { "path": "./apps/api" }
+  ]
+}
