@@ -29,6 +29,13 @@ const sectionGroups = [
   { title: 'Trending Categories', products: productItems.slice(3, 8) }
 ]
 
+const summaryStats = [
+  { label: 'Customers', value: '12.4k' },
+  { label: 'Seller shops', value: '1.1k' },
+  { label: 'Monthly sales', value: '$48k' },
+  { label: 'Ratings', value: '4.9/5' }
+]
+
 const footerLinks = {
   about: [
     { label: 'About Us', href: '/about' },
@@ -51,6 +58,8 @@ const footerLinks = {
 }
 
 export function HomePage() {
+  const featuredProducts = productItems.slice(0, 5)
+
   return (
     <div className="bg-[#f5f6f9] text-slate-900">
       <div className="bg-[#f3642c] py-2 text-center text-sm font-medium text-white">
@@ -204,6 +213,17 @@ export function HomePage() {
           ))}
         </div>
 
+        <div className="mt-8 rounded-[24px] bg-white p-5 shadow-sm ring-1 ring-slate-200">
+          <div className="grid gap-4 md:grid-cols-4">
+            {summaryStats.map((item) => (
+              <div key={item.label} className="rounded-2xl bg-slate-50 p-4">
+                <p className="text-xs uppercase tracking-[0.18em] text-slate-500">{item.label}</p>
+                <p className="mt-2 text-2xl font-black text-slate-900">{item.value}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
         {sectionGroups.map((group) => (
           <div key={group.title} className="mt-10">
             <div className="mb-5 flex items-center justify-between">
@@ -212,7 +232,7 @@ export function HomePage() {
             </div>
 
             <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
-              {group.products.map((product) => (
+              {featuredProducts.map((product) => (
                 <div key={product.id} className="overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-sm">
                   <div className="relative bg-gradient-to-br from-slate-100 to-slate-200 p-5">
                     <div className="absolute left-3 top-3 rounded-full bg-[#ff496a] px-2 py-1 text-[10px] font-bold text-white">

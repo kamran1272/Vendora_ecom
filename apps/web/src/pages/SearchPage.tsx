@@ -2,11 +2,11 @@ import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { ProductCard } from '@/components/ui/ProductCard'
 import { marketplaceSearchCatalog, searchSortOptions } from '@/data/marketplace'
-import { fetchMarketplaceProducts } from '@/services/marketplace'
+import { fetchMarketplaceProducts, type MarketplaceProduct } from '@/services/marketplace'
 
 export function SearchPage() {
   const [searchParams, setSearchParams] = useSearchParams()
-  const [apiProducts, setApiProducts] = useState<Array<typeof marketplaceSearchCatalog[number]>>([])
+  const [apiProducts, setApiProducts] = useState<MarketplaceProduct[]>([])
 
   const keyword = (searchParams.get('q') ?? searchParams.get('search') ?? '').trim().toLowerCase()
   const category = searchParams.get('category') ?? 'all'
@@ -44,7 +44,9 @@ export function SearchPage() {
     }
   }, [keyword, category, brand, sort])
 
-  const sourceProducts = apiProducts.length > 0 ? apiProducts : marketplaceSearchCatalog
+  const sourceProducts: MarketplaceProduct[] = apiProducts.length > 0
+    ? apiProducts
+    : (marketplaceSearchCatalog as MarketplaceProduct[])
 
   const filteredProducts = useMemo(() => {
     let results = [...sourceProducts]
