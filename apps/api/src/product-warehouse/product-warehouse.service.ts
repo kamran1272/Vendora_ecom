@@ -55,6 +55,53 @@ export class ProductWarehouseService {
     };
   }
 
+  private toMarketplaceProduct(product: any) {
+    const imageList = Array.isArray(product.images) ? product.images : this.parseImages(product.images);
+    return {
+      id: product.id,
+      name: product.name,
+      slug: product.slug ?? product.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
+      category: product.category ?? 'General',
+      brand: product.brand ?? 'Generic',
+      seller: product.seller ?? 'Vendora seller',
+      shop: product.shop ?? 'Vendora seller',
+      price: Number(product.basePrice ?? product.price ?? 0),
+      oldPrice: Number(product.basePrice ?? product.price ?? 0),
+      rating: 4.8,
+      popularity: 90,
+      inStock: Number(product.stock ?? 0) > 0,
+      attributes: Array.isArray(product.attributes) ? product.attributes : ['featured'],
+      badge: product.status === 'PUBLISHED' ? 'Featured' : 'New',
+      description: product.description ?? '',
+      images: imageList,
+      stock: Number(product.stock ?? 0),
+      sellerId: product.sellerId ?? null,
+    };
+  }
+
+  async listPublicProducts(query: any = {}) {
+    const result = await this.listWarehouse({
+      page: query.page ?? 1,
+      limit: query.limit ?? 12,
+      search: query.search,
+      category: query.category,
+      brand: query.brand,
+      stockStatus: query.stockStatus,
+      sort: query.sort,
+      includeInactive: false,
+    });
+
+    return {
+      ...result,
+      items: result.items.map((item) => this.toMarketplaceProduct(item)),
+    };
+  }
+
+  async getPublicProduct(id: string) {
+    const product = await this.getProduct(id);
+    return this.toMarketplaceProduct(product);
+  }
+
   async getProduct(id: string) {
     const product = await this.prisma.warehouseProduct.findUnique({ where: { id } });
     if (!product) throw new NotFoundException('Warehouse product not found.');
@@ -135,27 +182,68 @@ export class ProductWarehouseService {
   }
 
   async addProducts(userId: string, productIds: string[]) {
-    const seller = await this.prisma.seller.findUnique({ where: { userId } });
-    if (!seller || String(seller.status).toUpperCase() !== 'ACTIVE') throw new BadRequestException('Only approved sellers can add warehouse products.');
-    const requestedIds = [...new Set(productIds || [])];
-    if (!requestedIds.length) throw new BadRequestException('Select at least one product.');
-    const [plan, currentCount, products, shop] = await Promise.all([
-      this.getPlan(seller.id),
-      this.prisma.sellerProduct.count({ where: { sellerId: seller.id } }),
-      this.prisma.warehouseProduct.findMany({ where: { id: { in: requestedIds }, status: 'PUBLISHED' } }),
-      this.prisma.shop.findUnique({ where: { sellerId: seller.id }, select: { id: true } }),
-    ]);
-    if (products.length !== requestedIds.length) throw new BadRequestException('One or more warehouse products are unavailable.');
-    if (products.some((product) => product.stock <= 0)) throw new BadRequestException('Out-of-stock products cannot be added.');
-    const existing = await this.prisma.sellerProduct.findMany({ where: { sellerId: seller.id, warehouseProductId: { in: requestedIds } }, select: { warehouseProductId: true } });
-    const existingIds = new Set(existing.map((item) => item.warehouseProductId));
-    const newProducts = products.filter((product) => !existingIds.has(product.id));
-    if (!newProducts.length) return { success: false, code: 'PRODUCT_ALREADY_ADDED', message: 'Product already added to your shop.', addedCount: 0 };
-    if (!unlimited(plan.productLimit) && currentCount + newProducts.length > plan.productLimit) {
-      return { success: false, code: 'PRODUCT_LIMIT_EXCEEDED', currentCount, productLimit: plan.productLimit, requestedCount: newProducts.length, remainingSlots: Math.max(0, plan.productLimit - currentCount) };
-    }
-    await this.prisma.sellerProduct.createMany({ data: newProducts.map((product) => ({ sellerId: seller.id, shopId: shop?.id, warehouseProductId: product.id, sellingPrice: product.basePrice + product.sellerMargin })) });
-    return { success: true, addedCount: newProducts.length, message: `${newProducts.length} product${newProducts.length === 1 ? '' : 's'} added successfully.` };
+    const result = await this.prisma.$transaction(async (tx) => {
+      const seller = await tx.seller.findUnique({ where: { userId } });
+      if (!seller || String(seller.status).toUpperCase() !== 'ACTIVE') {
+        throw new BadRequestException('Only approved sellers can add warehouse products.');
+      }
+
+      const requestedIds = [...new Set(productIds || [])];
+      if (!requestedIds.length) {
+        throw new BadRequestException('Select at least one product.');
+      }
+
+      const [plan, currentCount, products, shop] = await Promise.all([
+        this.getPlan(seller.id),
+        tx.sellerProduct.count({ where: { sellerId: seller.id } }),
+        tx.warehouseProduct.findMany({ where: { id: { in: requestedIds }, status: 'PUBLISHED' } }),
+        tx.shop.findUnique({ where: { sellerId: seller.id }, select: { id: true } }),
+      ]);
+
+      if (products.length !== requestedIds.length) {
+        throw new BadRequestException('One or more warehouse products are unavailable.');
+      }
+
+      if (products.some((product) => product.stock <= 0)) {
+        throw new BadRequestException('Out-of-stock products cannot be added.');
+      }
+
+      const existing = await tx.sellerProduct.findMany({
+        where: { sellerId: seller.id, warehouseProductId: { in: requestedIds } },
+        select: { warehouseProductId: true },
+      });
+
+      const existingIds = new Set(existing.map((item) => item.warehouseProductId));
+      const newProducts = products.filter((product) => !existingIds.has(product.id));
+
+      if (!newProducts.length) {
+        return { success: false, code: 'PRODUCT_ALREADY_ADDED', message: 'Product already added to your shop.', addedCount: 0 };
+      }
+
+      if (!unlimited(plan.productLimit) && currentCount + newProducts.length > plan.productLimit) {
+        return {
+          success: false,
+          code: 'PRODUCT_LIMIT_EXCEEDED',
+          currentCount,
+          productLimit: plan.productLimit,
+          requestedCount: newProducts.length,
+          remainingSlots: Math.max(0, plan.productLimit - currentCount),
+        };
+      }
+
+      await tx.sellerProduct.createMany({
+        data: newProducts.map((product) => ({
+          sellerId: seller.id,
+          shopId: shop?.id,
+          warehouseProductId: product.id,
+          sellingPrice: product.basePrice + product.sellerMargin,
+        })),
+      });
+
+      return { success: true, addedCount: newProducts.length, message: `${newProducts.length} product${newProducts.length === 1 ? '' : 's'} added successfully.` };
+    });
+
+    return result;
   }
 
   async listPlans() {

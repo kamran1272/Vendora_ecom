@@ -6,127 +6,129 @@ import { PrismaService } from '@/database/prisma.service';
 export class SellersService {
   constructor(private prisma: PrismaService) {}
 
-  private sellers: any[] = [
-    {
-      id: 1,
-      userId: 2,
-      shopName: 'Aurora Studio',
-      status: 'active',
-      rating: 4.8,
-      earnings: 4210.5,
-      withdrawableBalance: 3200.42,
-      commissionRate: 10,
-      approvedAt: new Date().toISOString(),
-    },
-    {
-      id: 2,
-      userId: 3,
-      shopName: 'Luna Labs',
-      status: 'active',
-      rating: 4.9,
-      earnings: 5350.7,
-      withdrawableBalance: 4100.14,
-      commissionRate: 8,
-      approvedAt: new Date().toISOString(),
-    },
-  ];
-
-  private orders: any[] = [
-    {
-      id: 101,
-      sellerId: 3,
-      customerName: 'Ava Morris',
-      status: 'Pending',
-      total: 259.98,
-      createdAt: new Date().toISOString(),
-      items: [{ name: 'Premium Wireless Headphones', quantity: 2 }],
-    },
-    {
-      id: 102,
-      sellerId: 3,
-      customerName: 'Lucas Reed',
-      status: 'Processing',
-      total: 219.99,
-      createdAt: new Date().toISOString(),
-      items: [{ name: 'Smart Watch Pro', quantity: 1 }],
-    },
-  ];
-
-  private shopProfile = {
-    userId: 3,
-    shopName: 'Nede store',
-    shopSlug: 'nede-store',
-    shopEmail: 'shop@nede.store',
-    phone: '+1234567890',
-    description: 'Modern lifestyle products and accessories.',
-    address: '12 Market Street',
-    country: 'United States',
-    state: 'California',
-    city: 'Los Angeles',
-    postalCode: '90001',
-    logo: 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?auto=format&fit=crop&w=600&q=80',
-    banner: 'https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=600&q=80',
-    verified: true,
-  };
-
-  private packages = [
-    { id: 1, name: 'Silver Shop', uploadLimit: 200, price: 49, active: true },
-    { id: 2, name: 'Gold Shop', uploadLimit: 500, price: 99 },
-  ];
-
-  private wallet = {
-    availableBalance: 3200.42,
-    pendingBalance: 540.0,
-    totalWithdrawn: 12840.25,
-    currency: 'USD',
-  };
-
-  private applications: any[] = [];
-  private withdrawals: any[] = [];
-
-  findAll() {
-    return this.sellers;
-  }
-
-  findOne(id: number) {
-    return this.sellers.find((s) => s.id === id);
-  }
-
-  findByUserId(userId: number) {
-    return this.sellers.find((s) => s.userId === userId);
-  }
-
-  create(sellerData: any) {
-    const newSeller = {
-      id: this.sellers.length + 1,
-      status: 'pending',
-      rating: 0,
-      earnings: 0,
-      withdrawableBalance: 0,
-      commissionRate: 10,
-      ...sellerData,
+  private serializeSeller(record: any) {
+    return {
+      id: record.id,
+      userId: record.userId,
+      status: record.status,
+      createdAt: record.createdAt,
+      updatedAt: record.updatedAt,
+      shop: record.shop ?? null,
+      user: record.user
+        ? {
+            id: record.user.id,
+            name: record.user.name,
+            email: record.user.email,
+            role: record.user.role,
+          }
+        : null,
     };
-    this.sellers.push(newSeller);
-    return newSeller;
   }
 
-  update(id: number, sellerData: any) {
-    const seller = this.findOne(id);
-    if (seller) {
-      Object.assign(seller, sellerData);
+  private serializeSellerApplication(record: any) {
+    return {
+      ...record,
+      id: record.id,
+      userId: record.userId,
+      sellerId: record.sellerId,
+      applicantName: record.applicantName,
+      email: record.email,
+      phone: record.phone,
+      shopName: record.shopName,
+      status: record.status,
+      createdAt: record.createdAt,
+      updatedAt: record.updatedAt,
+      user: record.user ? { id: record.user.id, name: record.user.name, email: record.user.email } : null,
+      seller: record.seller ? { id: record.seller.id, status: record.seller.status } : null,
+    };
+  }
+
+  private async getSellerOrdersForSeller(sellerId: string) {
+    const orders = await this.prisma.order.findMany({
+      where: { items: { some: { sellerId } } },
+      include: { items: true, user: true, payment: true, shipment: true, statusHistory: true },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return orders.map((order) => ({
+      ...order,
+      customerName: order.user?.name ?? 'Customer',
+      sellerItems: order.items.filter((item) => item.sellerId === sellerId),
+    }));
+  }
+
+  async findAll() {
+    const sellers = await this.prisma.seller.findMany({
+      include: { user: true, shop: true, sellerProducts: true },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return sellers.map((seller) => this.serializeSeller(seller));
+  }
+
+  async findOne(id: number | string) {
+    const seller = await this.prisma.seller.findUnique({
+      where: { id: String(id) },
+      include: { user: true, shop: true, sellerProducts: true },
+    });
+
+    if (!seller) {
+      throw new BadRequestException('Seller not found.');
     }
-    return seller;
+
+    return this.serializeSeller(seller);
   }
 
-  remove(id: number) {
-    const index = this.sellers.findIndex((s) => s.id === id);
-    if (index > -1) {
-      return this.sellers.splice(index, 1);
-    }
+  async findByUserId(userId: number | string) {
+    const seller = await this.prisma.seller.findUnique({
+      where: { userId: String(userId) },
+      include: { user: true, shop: true, sellerProducts: true },
+    });
+
+    return seller ? this.serializeSeller(seller) : null;
   }
 
-  getApplications() {
-    return this.applications;
+  async create(sellerData: any) {
+    const seller = await this.prisma.seller.create({
+      data: {
+        userId: String(sellerData.userId),
+        status: sellerData.status ?? 'PENDING',
+      },
+      include: { user: true, shop: true },
+    });
+
+    return this.serializeSeller(seller);
+  }
+
+  async update(id: number | string, sellerData: any) {
+    const seller = await this.prisma.seller.update({
+      where: { id: String(id) },
+      data: {
+        ...(sellerData.userId !== undefined ? { userId: String(sellerData.userId) } : {}),
+        ...(sellerData.status !== undefined ? { status: sellerData.status } : {}),
+      },
+      include: { user: true, shop: true },
+    });
+
+    return this.serializeSeller(seller);
+  }
+
+  async remove(id: number | string) {
+    const seller = await this.prisma.seller.delete({
+      where: { id: String(id) },
+      include: { user: true, shop: true },
+    });
+
+    return this.serializeSeller(seller);
+  }
+
+  async getApplications() {
+    const applications = await this.prisma.sellerApplication.findMany({
+      orderBy: { createdAt: 'desc' },
+      include: { user: true, seller: true },
+    });
+
+    return applications.map((application) => this.serializeSellerApplication(application));
   }
 
   async registerSeller(payload: {
@@ -142,7 +144,7 @@ export class SellersService {
     certificateFront?: string;
     certificateBack?: string;
   }) {
-    const { name, email, password, phone, shopName, category, transactionPassword, certificateType, invitationCode, certificateFront, certificateBack } = payload ?? {};
+    const { name, email, password, phone, shopName, category, certificateType, invitationCode, certificateFront, certificateBack } = payload ?? {};
 
     if (!name || !email || !password || !shopName) {
       throw new BadRequestException('Name, email, password and shop name are required.');
@@ -192,23 +194,21 @@ export class SellersService {
         select: { id: true, slug: true },
       });
 
-      const application = {
-        id: `app-${Date.now()}`,
-        userId: user.id,
-        sellerId: seller.id,
-        applicantName: name.trim(),
-        email: normalizedEmail,
-        phone: phone || '',
-        shopName: shopName.trim(),
-        certificateType: certificateType || 'id_card',
-        certificateFront: certificateFront || null,
-        certificateBack: certificateBack || null,
-        invitationCode: invitationCode || '',
-        status: 'PENDING',
-        createdAt: new Date().toISOString(),
-      };
-
-      this.applications.unshift(application);
+      const application = await tx.sellerApplication.create({
+        data: {
+          userId: user.id,
+          sellerId: seller.id,
+          applicantName: name.trim(),
+          email: normalizedEmail,
+          phone: phone || '',
+          shopName: shopName.trim(),
+          certificateType: certificateType || 'id_card',
+          certificateFront: certificateFront || null,
+          certificateBack: certificateBack || null,
+          invitationCode: invitationCode || '',
+          status: 'PENDING',
+        },
+      });
 
       return {
         userId: user.id,
@@ -226,119 +226,165 @@ export class SellersService {
     };
   }
 
-  approveApplication(applicationId: string | number) {
-    const application = this.applications.find((item) => String(item.id) === String(applicationId));
+  async approveApplication(applicationId: string | number) {
+    const application = await this.prisma.sellerApplication.findUnique({
+      where: { id: String(applicationId) },
+      include: { seller: true },
+    });
+
     if (!application) {
       throw new BadRequestException('Seller application not found.');
     }
 
-    application.status = 'APPROVED';
-    const matchingSeller = this.sellers.find((seller) => String(seller.userId) === String(application.userId) || String(seller.id) === String(application.sellerId));
-    if (matchingSeller) {
-      matchingSeller.status = 'active';
-      matchingSeller.approvedAt = new Date().toISOString();
+    const updatedApplication = await this.prisma.sellerApplication.update({
+      where: { id: application.id },
+      data: { status: 'APPROVED' },
+      include: { user: true, seller: true },
+    });
+
+    if (updatedApplication.sellerId) {
+      await this.prisma.seller.update({
+        where: { id: updatedApplication.sellerId },
+        data: { status: 'ACTIVE' },
+      });
     }
 
-    return { message: 'Seller application approved successfully.', application };
+    return { message: 'Seller application approved successfully.', application: this.serializeSellerApplication(updatedApplication) };
   }
 
-  rejectApplication(applicationId: string | number) {
-    const application = this.applications.find((item) => String(item.id) === String(applicationId));
+  async rejectApplication(applicationId: string | number) {
+    const application = await this.prisma.sellerApplication.findUnique({
+      where: { id: String(applicationId) },
+      include: { seller: true },
+    });
+
     if (!application) {
       throw new BadRequestException('Seller application not found.');
     }
 
-    application.status = 'REJECTED';
-    const matchingSeller = this.sellers.find((seller) => String(seller.userId) === String(application.userId) || String(seller.id) === String(application.sellerId));
-    if (matchingSeller) {
-      matchingSeller.status = 'rejected';
+    const updatedApplication = await this.prisma.sellerApplication.update({
+      where: { id: application.id },
+      data: { status: 'REJECTED' },
+      include: { user: true, seller: true },
+    });
+
+    if (updatedApplication.sellerId) {
+      await this.prisma.seller.update({
+        where: { id: updatedApplication.sellerId },
+        data: { status: 'REJECTED' },
+      });
     }
 
-    return { message: 'Seller application rejected.', application };
+    return { message: 'Seller application rejected.', application: this.serializeSellerApplication(updatedApplication) };
   }
 
-  applyForSeller(userId: number, shopName: string, payload?: any) {
-    const existing = this.findByUserId(userId);
+  async applyForSeller(userId: number | string, shopName: string, payload?: any) {
+    const existing = await this.findByUserId(userId);
     if (existing) {
       return { ...existing, message: 'Seller application already exists.' };
     }
 
-    const seller = this.create({
-      userId,
-      shopName,
-      ownerName: payload?.ownerName || 'Seller Owner',
-      email: payload?.email || `seller${userId}@vendora.local`,
-      status: 'pending',
-      businessType: payload?.businessType || 'Individual',
-      country: payload?.country || 'US',
-      city: payload?.city || 'New York',
-      approvedAt: null,
+    const seller = await this.prisma.seller.create({
+      data: {
+        userId: String(userId),
+        status: 'PENDING',
+      },
+      include: { user: true, shop: true },
     });
+
+    if (shopName) {
+      await this.prisma.shop.create({
+        data: {
+          name: shopName,
+          slug: shopName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'shop',
+          sellerId: seller.id,
+        },
+      }).catch(() => undefined);
+    }
 
     return {
       message: 'Seller application submitted successfully.',
-      seller,
+      seller: this.serializeSeller(seller),
     };
   }
 
-  approveSeller(id: number) {
-    const seller = this.findOne(id);
-    if (!seller) {
-      throw new BadRequestException('Seller not found.');
-    }
+  async approveSeller(id: number | string) {
+    const seller = await this.prisma.seller.update({
+      where: { id: String(id) },
+      data: { status: 'ACTIVE' },
+      include: { user: true, shop: true },
+    });
 
-    seller.status = 'active';
-    seller.approvedAt = new Date().toISOString();
-    return { message: 'Seller approved successfully.', seller };
+    return { message: 'Seller approved successfully.', seller: this.serializeSeller(seller) };
   }
 
-  rejectSeller(id: number) {
-    const seller = this.findOne(id);
-    if (!seller) {
-      throw new BadRequestException('Seller not found.');
-    }
+  async rejectSeller(id: number | string) {
+    const seller = await this.prisma.seller.update({
+      where: { id: String(id) },
+      data: { status: 'REJECTED' },
+      include: { user: true, shop: true },
+    });
 
-    seller.status = 'rejected';
-    return { message: 'Seller rejected.', seller };
+    return { message: 'Seller rejected.', seller: this.serializeSeller(seller) };
   }
 
-  suspendSeller(id: number) {
-    const seller = this.findOne(id);
-    if (!seller) {
-      throw new BadRequestException('Seller not found.');
-    }
+  async suspendSeller(id: number | string) {
+    const seller = await this.prisma.seller.update({
+      where: { id: String(id) },
+      data: { status: 'SUSPENDED' },
+      include: { user: true, shop: true },
+    });
 
-    seller.status = 'suspended';
-    return { message: 'Seller suspended.', seller };
+    return { message: 'Seller suspended.', seller: this.serializeSeller(seller) };
   }
 
   async getDashboard(userId: string | number) {
-    const seller = this.findByUserId(Number(userId)) ?? this.sellers[1];
-    const shop = this.shopProfile;
-    const sellerRecord = await this.prisma.seller.findUnique({ where: { userId: String(userId) } });
-    const sellerProducts = sellerRecord ? await this.prisma.sellerProduct.findMany({ where: { sellerId: sellerRecord.id }, include: { warehouseProduct: true }, take: 5, orderBy: { createdAt: 'desc' } }) : [];
-    const sellerOrders = this.orders.filter((order) => order.sellerId === userId);
-    const productCount = sellerRecord ? await this.prisma.sellerProduct.count({ where: { sellerId: sellerRecord.id } }) : 0;
-    const subscription = sellerRecord ? await this.prisma.sellerSubscription.findFirst({ where: { sellerId: sellerRecord.id, status: 'ACTIVE', plan: { status: 'ACTIVE' } }, include: { plan: true } }) : null;
-    const activePlan = subscription?.plan ?? await this.prisma.subscriptionPlan.upsert({ where: { name: 'FREE' }, update: {}, create: { name: 'FREE', productLimit: 200, price: 0, duration: 30 } });
-    const totalSales = sellerOrders.reduce((sum, order) => sum + Number(order.total || order.amount || 0), 0);
+    const sellerRecord = await this.prisma.seller.findUnique({
+      where: { userId: String(userId) },
+      include: { shop: true },
+    });
+
+    if (!sellerRecord) {
+      throw new BadRequestException('Seller account not found.');
+    }
+
+    const sellerOrders = await this.getSellerOrdersForSeller(sellerRecord.id);
+    const productCount = await this.prisma.sellerProduct.count({ where: { sellerId: sellerRecord.id } });
+    const subscription = await this.prisma.sellerSubscription.findFirst({
+      where: { sellerId: sellerRecord.id, status: 'ACTIVE', plan: { status: 'ACTIVE' } },
+      include: { plan: true },
+    });
+    const activePlan = subscription?.plan ?? (await this.prisma.subscriptionPlan.upsert({
+      where: { name: 'FREE' },
+      update: {},
+      create: { name: 'FREE', productLimit: 200, price: 0, duration: 30 },
+    }));
+
+    const totalSales = sellerOrders.reduce((sum, order) => sum + Number(order.total || 0), 0);
     const deliveredOrders = sellerOrders.filter((order) => String(order.status).toLowerCase() === 'delivered').length;
     const cancelledOrders = sellerOrders.filter((order) => String(order.status).toLowerCase() === 'cancelled').length;
     const onDeliveryOrders = sellerOrders.filter((order) => ['shipped', 'on_delivery', 'out_for_delivery'].includes(String(order.status).toLowerCase())).length;
     const newOrders = sellerOrders.filter((order) => ['pending', 'new'].includes(String(order.status).toLowerCase())).length;
 
+    const sellerProducts = await this.prisma.sellerProduct.findMany({
+      where: { sellerId: sellerRecord.id },
+      include: { warehouseProduct: true },
+      take: 5,
+      orderBy: { createdAt: 'desc' },
+    });
+
     return {
       shop: {
-        name: shop.shopName,
+        name: sellerRecord.shop?.name ?? 'Seller Shop',
         role: 'Seller',
-        rating: seller?.rating ?? 5,
-        verified: shop.verified,
+        rating: 5,
+        verified: true,
       },
-      rating: seller?.rating ?? 5,
-      verified: shop.verified,
+      rating: 5,
+      verified: true,
       products: productCount,
       totalOrders: sellerOrders.length,
-      totalSales: totalSales || Number(seller?.earnings || 0),
+      totalSales,
       todayViews: 0,
       sales: {
         today: 0,
@@ -367,7 +413,7 @@ export class SellersService {
       statistics: {
         products: productCount,
         totalOrders: sellerOrders.length,
-        totalSales: totalSales || Number(seller?.earnings || 0),
+        totalSales,
         todayViews: 0,
       },
       packageInfo: {
@@ -381,7 +427,13 @@ export class SellersService {
   async getSellerProducts(userId: string | number) {
     const seller = await this.prisma.seller.findUnique({ where: { userId: String(userId) } });
     if (!seller) return [];
-    const products = await this.prisma.sellerProduct.findMany({ where: { sellerId: seller.id }, include: { warehouseProduct: true }, orderBy: { createdAt: 'desc' } });
+
+    const products = await this.prisma.sellerProduct.findMany({
+      where: { sellerId: seller.id },
+      include: { warehouseProduct: true },
+      orderBy: { createdAt: 'desc' },
+    });
+
     return products.map((product) => ({
       ...product,
       id: product.id,
@@ -394,20 +446,34 @@ export class SellersService {
       category: product.warehouseProduct.category,
       brand: product.warehouseProduct.brand,
       images: JSON.parse(product.warehouseProduct.images || '[]'),
+      status: product.status,
     }));
   }
 
-  getAllOrders() {
-    return this.orders;
+  async getAllOrders() {
+    return this.prisma.order.findMany({
+      include: { items: true, payment: true, shipment: true, statusHistory: true, user: true },
+      orderBy: { createdAt: 'desc' },
+    });
   }
 
   async getSellerProduct(id: string | number, userId: string | number) {
     const seller = await this.prisma.seller.findUnique({ where: { userId: String(userId) } });
-    const product = seller ? await this.prisma.sellerProduct.findFirst({ where: { id: String(id), sellerId: seller.id }, include: { warehouseProduct: true } }) : null;
+    const product = seller ? await this.prisma.sellerProduct.findFirst({
+      where: { id: String(id), sellerId: seller.id },
+      include: { warehouseProduct: true },
+    }) : null;
+
     if (!product) {
       throw new BadRequestException('Product not found.');
     }
-    return { ...product, name: product.warehouseProduct.name, price: product.sellingPrice, images: JSON.parse(product.warehouseProduct.images || '[]') };
+
+    return {
+      ...product,
+      name: product.warehouseProduct.name,
+      price: product.sellingPrice,
+      images: JSON.parse(product.warehouseProduct.images || '[]'),
+    };
   }
 
   createSellerProduct(userId: number, payload: any) {
@@ -418,13 +484,21 @@ export class SellersService {
     const seller = await this.prisma.seller.findUnique({ where: { userId: String(userId) } });
     const product = seller ? await this.prisma.sellerProduct.findFirst({ where: { id: String(id), sellerId: seller.id } }) : null;
     if (!product) throw new BadRequestException('Product not found.');
-    return this.prisma.sellerProduct.update({ where: { id: product.id }, data: { ...(payload.sellingPrice !== undefined ? { sellingPrice: Number(payload.sellingPrice) } : {}), ...(payload.status !== undefined ? { status: payload.status } : {}) } });
+
+    return this.prisma.sellerProduct.update({
+      where: { id: product.id },
+      data: {
+        ...(payload.sellingPrice !== undefined ? { sellingPrice: Number(payload.sellingPrice) } : {}),
+        ...(payload.status !== undefined ? { status: payload.status } : {}),
+      },
+    });
   }
 
   async deleteSellerProduct(id: string | number, userId: string | number) {
     const seller = await this.prisma.seller.findUnique({ where: { userId: String(userId) } });
     const product = seller ? await this.prisma.sellerProduct.findFirst({ where: { id: String(id), sellerId: seller.id } }) : null;
     if (!product) throw new BadRequestException('Product not found.');
+
     await this.prisma.sellerProduct.delete({ where: { id: product.id } });
     return { message: 'Product deleted', product };
   }
@@ -445,123 +519,220 @@ export class SellersService {
     }));
   }
 
-  getShop(userId: number) {
-    return {
-      ...this.shopProfile,
-      userId,
-      shopName: this.shopProfile.shopName,
+  async getShop(userId: number | string) {
+    const seller = await this.prisma.seller.findUnique({
+      where: { userId: String(userId) },
+      include: { shop: true },
+    });
+
+    if (!seller) {
+      throw new BadRequestException('Seller profile not found.');
+    }
+
+    return seller.shop ?? {
+      id: null,
+      name: 'Seller Shop',
+      slug: 'seller-shop',
+      description: null,
+      sellerId: seller.id,
     };
   }
 
-  updateShop(userId: number, payload: any) {
-    this.shopProfile = { ...this.shopProfile, ...payload };
-    return this.shopProfile;
+  async updateShop(userId: number | string, payload: any) {
+    const seller = await this.prisma.seller.findUnique({ where: { userId: String(userId) }, include: { shop: true } });
+    if (!seller) throw new BadRequestException('Seller profile not found.');
+
+    if (!seller.shop) {
+      return this.prisma.shop.create({
+        data: {
+          name: payload.name || 'Seller Shop',
+          slug: (payload.slug || 'seller-shop').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'seller-shop',
+          description: payload.description || null,
+          sellerId: seller.id,
+        },
+      });
+    }
+
+    return this.prisma.shop.update({
+      where: { id: seller.shop.id },
+      data: {
+        ...(payload.name !== undefined ? { name: payload.name } : {}),
+        ...(payload.slug !== undefined ? { slug: payload.slug } : {}),
+        ...(payload.description !== undefined ? { description: payload.description } : {}),
+        ...(payload.logo !== undefined ? { logo: payload.logo } : {}),
+        ...(payload.banner !== undefined ? { banner: payload.banner } : {}),
+      },
+    });
   }
 
-  getSellerOrders(userId: number) {
-    return this.orders.filter((order) => order.sellerId === userId);
+  async getSellerOrders(userId: number | string) {
+    const seller = await this.prisma.seller.findUnique({ where: { userId: String(userId) } });
+    if (!seller) return [];
+
+    return this.getSellerOrdersForSeller(seller.id);
   }
 
-  getSellerOrder(id: number, userId: number) {
-    const order = this.orders.find((item) => item.id === id && item.sellerId === userId);
+  async getSellerOrder(id: number | string, userId: number | string) {
+    const seller = await this.prisma.seller.findUnique({ where: { userId: String(userId) } });
+    if (!seller) throw new BadRequestException('Seller profile not found.');
+
+    const order = await this.prisma.order.findFirst({
+      where: { id: String(id), items: { some: { sellerId: seller.id } } },
+      include: { items: true, user: true, payment: true, shipment: true, statusHistory: true },
+    });
+
+    if (!order) throw new BadRequestException('Order not found.');
+    return { ...order, customerName: order.user?.name ?? 'Customer' };
+  }
+
+  async updateSellerOrderStatus(id: number | string, userId: number | string, status: string) {
+    const seller = await this.prisma.seller.findUnique({ where: { userId: String(userId) } });
+    if (!seller) throw new BadRequestException('Seller profile not found.');
+
+    const order = await this.prisma.order.findFirst({
+      where: { id: String(id), items: { some: { sellerId: seller.id } } },
+      include: { statusHistory: true },
+    });
+
     if (!order) {
       throw new BadRequestException('Order not found.');
     }
-    return order;
-  }
 
-  updateSellerOrderStatus(id: number, userId: number, status: string) {
-    const order = this.orders.find((item) => item.id === id && item.sellerId === userId);
-    if (!order) {
-      throw new BadRequestException('Order not found.');
-    }
-    const allowedStatuses = ['Pending', 'Confirmed', 'Processing', 'On Delivery', 'Delivered', 'Cancelled', 'Refund Requested', 'Refunded'];
-    if (!allowedStatuses.includes(status)) {
+    const allowedStatuses = ['PENDING', 'CONFIRMED', 'PROCESSING', 'ON_DELIVERY', 'DELIVERED', 'CANCELLED', 'REFUND_REQUESTED', 'REFUNDED'];
+    const normalizedStatus = String(status || '').toUpperCase();
+    if (!allowedStatuses.includes(normalizedStatus)) {
       throw new BadRequestException('Invalid order status.');
     }
-    order.status = status;
-    return order;
+
+    return this.prisma.$transaction(async (tx) => {
+      await tx.orderStatusHistory.create({
+        data: {
+          orderId: order.id,
+          status: normalizedStatus,
+          note: `Status updated to ${normalizedStatus}`,
+        },
+      });
+
+      return tx.order.update({
+        where: { id: order.id },
+        data: { status: normalizedStatus },
+        include: { items: true, payment: true, shipment: true, statusHistory: true, user: true },
+      });
+    });
   }
 
   async getSellerPackage(userId: string | number) {
     const seller = await this.prisma.seller.findUnique({ where: { userId: String(userId) } });
     if (!seller) throw new BadRequestException('Seller profile not found.');
-    const subscription = await this.prisma.sellerSubscription.findFirst({ where: { sellerId: seller.id, status: 'ACTIVE', plan: { status: 'ACTIVE' } }, include: { plan: true } });
-    const plan = subscription?.plan ?? await this.prisma.subscriptionPlan.upsert({ where: { name: 'FREE' }, update: {}, create: { name: 'FREE', productLimit: 200, price: 0, duration: 30 } });
+
+    const subscription = await this.prisma.sellerSubscription.findFirst({
+      where: { sellerId: seller.id, status: 'ACTIVE', plan: { status: 'ACTIVE' } },
+      include: { plan: true },
+    });
+    const plan = subscription?.plan ?? await this.prisma.subscriptionPlan.upsert({
+      where: { name: 'FREE' },
+      update: {},
+      create: { name: 'FREE', productLimit: 200, price: 0, duration: 30 },
+    });
     const usedUploads = await this.prisma.sellerProduct.count({ where: { sellerId: seller.id } });
-    return { userId, currentPackage: { ...plan, uploadLimit: plan.productLimit }, usedUploads, remainingUploads: plan.productLimit < 0 ? null : Math.max(0, plan.productLimit - usedUploads) };
-  }
 
-  getPackages() {
-    return this.packages;
-  }
-
-  purchasePackage(packageId: number, userId: number) {
-    const selected = this.packages.find((item) => item.id === packageId);
-    if (!selected) {
-      throw new BadRequestException('Package not found.');
-    }
-    return { message: 'Package purchased successfully', package: selected, userId };
-  }
-
-  getWallet(userId: number) {
     return {
       userId,
-      ...this.wallet,
+      currentPackage: { ...plan, uploadLimit: plan.productLimit },
+      usedUploads,
+      remainingUploads: plan.productLimit < 0 ? null : Math.max(0, plan.productLimit - usedUploads),
     };
   }
 
-  getEarnings(userId: number) {
-    const seller = this.findByUserId(userId);
-    if (!seller) {
-      throw new BadRequestException('Seller profile not found.');
-    }
+  async getPackages() {
+    return this.prisma.subscriptionPlan.findMany({
+      where: { status: 'ACTIVE' },
+      orderBy: { price: 'asc' },
+    });
+  }
 
-    const grossSales = seller.earnings || 4210.5;
-    const platformCommission = grossSales * ((seller.commissionRate || 10) / 100);
+  async purchasePackage(packageId: number | string, userId: number | string) {
+    const seller = await this.prisma.seller.findUnique({ where: { userId: String(userId) } });
+    if (!seller) throw new BadRequestException('Seller profile not found.');
+
+    const selected = await this.prisma.subscriptionPlan.findUnique({ where: { id: String(packageId) } });
+    if (!selected) throw new BadRequestException('Package not found.');
+
+    const subscription = await this.prisma.sellerSubscription.upsert({
+      where: { sellerId: seller.id },
+      update: {
+        planId: selected.id,
+        status: 'ACTIVE',
+        expiresAt: new Date(Date.now() + selected.duration * 24 * 60 * 60 * 1000),
+      },
+      create: {
+        sellerId: seller.id,
+        planId: selected.id,
+        status: 'ACTIVE',
+        expiresAt: new Date(Date.now() + selected.duration * 24 * 60 * 60 * 1000),
+      },
+    });
+
+    return { message: 'Package purchased successfully', package: selected, subscription, userId };
+  }
+
+  async getWallet(userId: number | string) {
+    const seller = await this.prisma.seller.findUnique({ where: { userId: String(userId) } });
+    if (!seller) throw new BadRequestException('Seller profile not found.');
+
+    const sellerOrders = await this.getSellerOrdersForSeller(seller.id);
+    const totalRevenue = sellerOrders.reduce((sum, order) => sum + Number(order.total || 0), 0);
+
+    return {
+      userId: String(userId),
+      availableBalance: Number(totalRevenue * 0.7).toFixed(2),
+      pendingBalance: Number(totalRevenue * 0.3).toFixed(2),
+      totalWithdrawn: 0,
+      currency: 'USD',
+    };
+  }
+
+  async getEarnings(userId: number | string) {
+    const seller = await this.prisma.seller.findUnique({ where: { userId: String(userId) } });
+    if (!seller) throw new BadRequestException('Seller profile not found.');
+
+    const sellerOrders = await this.getSellerOrdersForSeller(seller.id);
+    const grossSales = sellerOrders.reduce((sum, order) => sum + Number(order.total || 0), 0);
+    const platformCommission = grossSales * 0.1;
     const netEarnings = grossSales - platformCommission;
 
     return {
       grossSales,
       platformCommission,
       netEarnings,
-      withdrawableBalance: seller.withdrawableBalance || 3200.42,
+      withdrawableBalance: netEarnings,
     };
   }
 
-  requestWithdrawal(userId: number, payload: any) {
-    const seller = this.findByUserId(userId);
-    if (!seller) {
-      throw new BadRequestException('Seller profile not found.');
-    }
+  async requestWithdrawal(userId: number | string, payload: any) {
+    const seller = await this.prisma.seller.findUnique({ where: { userId: String(userId) } });
+    if (!seller) throw new BadRequestException('Seller profile not found.');
 
-    const amount = Number(payload?.amount || seller.withdrawableBalance || 0);
-    if (amount <= 0) {
-      throw new BadRequestException('Withdrawal amount must be greater than zero.');
-    }
+    const amount = Number(payload?.amount || 0);
+    if (amount <= 0) throw new BadRequestException('Withdrawal amount must be greater than zero.');
 
-    const request = {
-      id: this.withdrawals.length + 1,
-      sellerId: seller.id,
-      amount,
-      bankDetails: payload?.bankDetails || 'Bank transfer',
-      status: 'pending',
-      createdAt: new Date().toISOString(),
-    };
-
-    this.withdrawals.push(request);
     return {
       message: 'Withdrawal request created successfully.',
-      request,
+      request: {
+        id: `withdrawal-${Date.now()}`,
+        sellerId: seller.id,
+        amount,
+        bankDetails: payload?.bankDetails || 'Bank transfer',
+        status: 'pending',
+        createdAt: new Date().toISOString(),
+      },
     };
   }
 
-  getWithdrawals(userId: number) {
-    const seller = this.findByUserId(userId);
-    if (!seller) {
-      throw new BadRequestException('Seller profile not found.');
-    }
+  async getWithdrawals(userId: number | string) {
+    const seller = await this.prisma.seller.findUnique({ where: { userId: String(userId) } });
+    if (!seller) throw new BadRequestException('Seller profile not found.');
 
-    return this.withdrawals.filter((entry) => entry.sellerId === seller.id);
+    return [];
   }
 }

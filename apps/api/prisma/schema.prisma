@@ -8,16 +8,19 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(uuid())
-  name      String
-  email     String   @unique
-  password  String
-  role      String   @default("CUSTOMER")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                  String    @id @default(uuid())
+  name                String
+  email               String    @unique
+  password            String
+  role                String    @default("CUSTOMER")
+  passwordResetToken  String?
+  passwordResetExpires DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
-  sellerProfile    Seller?
+  sellerProfile      Seller?
   sellerApplications SellerApplication[]
+  orders             Order[]
 
   @@map("users")
 }
@@ -60,16 +63,17 @@ model SellerApplication {
 }
 
 model Shop {
-  id          String   @id @default(uuid())
+  id          String         @id @default(uuid())
   name        String
-  slug        String   @unique
+  slug        String         @unique
   logo        String?
   banner      String?
   description String?
-  sellerId    String   @unique
-  seller      Seller   @relation(fields: [sellerId], references: [id], onDelete: Cascade)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  sellerId    String         @unique
+  seller      Seller         @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  sellerProducts SellerProduct[]
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
 
   @@map("shops")
 }
@@ -108,6 +112,7 @@ model SellerProduct {
   updatedAt          DateTime        @updatedAt
   warehouseProduct   WarehouseProduct @relation(fields: [warehouseProductId], references: [id], onDelete: Restrict)
   seller             Seller           @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  shop               Shop?            @relation(fields: [shopId], references: [id], onDelete: SetNull)
 
   @@unique([sellerId, warehouseProductId])
   @@index([sellerId, createdAt])
@@ -142,4 +147,118 @@ model SellerSubscription {
 
   @@index([planId, status])
   @@map("seller_subscriptions")
+}
+
+model Cart {
+  id         String     @id @default(uuid())
+  userId     String?    @unique
+  sessionId  String?    @unique
+  couponCode String?
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  items      CartItem[]
+
+  @@map("carts")
+}
+
+model CartItem {
+  id        String   @id @default(uuid())
+  cartId    String
+  productId String
+  warehouseProductId String?
+  sellerId  String?
+  name      String
+  price     Float
+  quantity  Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  cart      Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
+
+  @@index([cartId])
+  @@index([productId])
+  @@map("cart_items")
+}
+
+model Order {
+  id              String             @id @default(uuid())
+  userId          String
+  user            User               @relation(fields: [userId], references: [id], onDelete: Restrict)
+  status          String             @default("PENDING")
+  subtotal        Float              @default(0)
+  tax             Float              @default(0)
+  shipping        Float              @default(0)
+  discount        Float              @default(0)
+  total           Float              @default(0)
+  paymentMethod   String             @default("stripe")
+  shippingAddress String?
+  couponCode      String?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  items           OrderItem[]
+  payment         Payment?
+  shipment        Shipment?
+  statusHistory   OrderStatusHistory[]
+
+  @@index([userId, createdAt])
+  @@map("orders")
+}
+
+model OrderItem {
+  id                 String   @id @default(uuid())
+  orderId            String
+  productId          String
+  warehouseProductId String?
+  sellerId           String?
+  name               String
+  quantity           Int      @default(1)
+  price              Float
+  createdAt          DateTime @default(now())
+  order              Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([productId])
+  @@map("order_items")
+}
+
+model Payment {
+  id            String   @id @default(uuid())
+  orderId       String   @unique
+  amount        Float
+  method        String   @default("stripe")
+  status        String   @default("PENDING")
+  gateway       String   @default("stripe")
+  transactionId String?
+  rawResponse   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  order         Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("payments")
+}
+
+model Shipment {
+  id                String    @id @default(uuid())
+  orderId           String    @unique
+  carrier           String?
+  trackingNumber    String?
+  status            String    @default("PENDING")
+  shippingAddress   String?
+  estimatedDelivery DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  order             Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("shipments")
+}
+
+model OrderStatusHistory {
+  id        String   @id @default(uuid())
+  orderId   String
+  status    String
+  note      String?
+  createdAt DateTime @default(now())
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId, createdAt])
+  @@map("order_status_history")
 }

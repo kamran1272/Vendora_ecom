@@ -12,17 +12,17 @@ export class OrdersController {
 
   @Get(':id')
   findOne(@Param('id') id: string) {
-    return this.ordersService.findOne(Number(id));
+    return this.ordersService.findOne(id);
   }
 
   @Get('user/:userId')
   findByUser(@Param('userId') userId: string) {
-    return this.ordersService.findByUser(Number(userId));
+    return this.ordersService.findByUser(userId);
   }
 
   @Post('checkout/:userId')
   checkout(@Param('userId') userId: string, @Body() payload: any) {
-    return this.ordersService.checkout(Number(userId), payload);
+    return this.ordersService.checkout(userId, payload);
   }
 
   @Post()
@@ -32,6 +32,6 @@ export class OrdersController {
 
   @Put(':id/status')
   updateStatus(@Param('id') id: string, @Body() data: any) {
-    return this.ordersService.updateStatus(Number(id), data.status);
+    return this.ordersService.updateStatus(id, data.status);
   }
 }

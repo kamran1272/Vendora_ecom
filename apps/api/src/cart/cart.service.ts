@@ -1,89 +1,128 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import { PrismaService } from '../database/prisma.service';
 
-type CartItem = {
-  productId: number;
-  name: string;
-  price: number;
-  quantity: number;
-  sellerId?: number;
-};
-
-type CartState = {
-  userId: number;
-  items: CartItem[];
-  subtotal: number;
-  tax: number;
-  shipping: number;
-  discount: number;
-  total: number;
-  couponCode?: string;
+type CartItemInput = {
+  productId: number | string;
+  warehouseProductId?: string | null;
+  name?: string;
+  price?: number;
+  quantity?: number;
+  sellerId?: number | string;
 };
 
 @Injectable()
 export class CartService {
-  private carts = new Map<number, CartState>();
+  constructor(private readonly prisma: PrismaService) {}
 
-  private buildEmptyCart(userId: number): CartState {
+  private recalculate(items: Array<{ price: number; quantity: number }>, couponCode?: string | null) {
+    const subtotal = items.reduce((sum, item) => sum + Number(item.price) * Number(item.quantity), 0);
+    const tax = subtotal * 0.08;
+    const shipping = subtotal === 0 ? 0 : 12;
+    const discount = couponCode === 'SAVE10' ? subtotal * 0.1 : 0;
+
     return {
-      userId,
-      items: [],
-      subtotal: 0,
-      tax: 0,
-      shipping: 0,
-      discount: 0,
-      total: 0,
+      subtotal: Number(subtotal.toFixed(2)),
+      tax: Number(tax.toFixed(2)),
+      shipping: Number(shipping.toFixed(2)),
+      discount: Number(discount.toFixed(2)),
+      total: Number((subtotal + tax + shipping - discount).toFixed(2)),
     };
   }
 
-  private recalculate(cart: CartState) {
-    const subtotal = cart.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
-    const tax = subtotal * 0.08;
-    const shipping = subtotal === 0 ? 0 : 12;
-    const discount = cart.couponCode === 'SAVE10' ? subtotal * 0.1 : 0;
+  private async getOrCreateCart(userId?: number | string, sessionId?: string) {
+    const safeUserId = userId !== undefined ? String(userId) : undefined;
 
-    cart.subtotal = subtotal;
-    cart.tax = tax;
-    cart.shipping = shipping;
-    cart.discount = discount;
-    cart.total = subtotal + tax + shipping - discount;
+    let cart = safeUserId
+      ? await this.prisma.cart.findUnique({
+          where: { userId: safeUserId },
+          include: { items: true },
+        })
+      : null;
+
+    if (!cart && sessionId) {
+      cart = await this.prisma.cart.findUnique({
+        where: { sessionId },
+        include: { items: true },
+      });
+    }
+
+    if (!cart) {
+      cart = await this.prisma.cart.create({
+        data: {
+          userId: safeUserId ?? null,
+          sessionId: sessionId ?? null,
+        },
+        include: { items: true },
+      });
+    }
+
     return cart;
   }
 
-  getCart(userId: number) {
-    const cart = this.carts.get(userId) || this.buildEmptyCart(userId);
-    this.carts.set(userId, cart);
-    return this.recalculate({ ...cart, items: [...cart.items] });
+  async getCart(userId: number | string, sessionId?: string) {
+    const cart = await this.getOrCreateCart(userId, sessionId);
+    const totals = this.recalculate(cart.items, cart.couponCode);
+
+    return {
+      id: cart.id,
+      userId: cart.userId,
+      sessionId: cart.sessionId,
+      items: cart.items.map((item) => ({
+        id: item.id,
+        cartId: item.cartId,
+        productId: item.productId,
+        warehouseProductId: item.warehouseProductId,
+        sellerId: item.sellerId,
+        name: item.name,
+        price: Number(item.price),
+        quantity: item.quantity,
+      })),
+      couponCode: cart.couponCode,
+      ...totals,
+    };
   }
 
-  addItem(userId: number, product: { productId: number; name?: string; price?: number; sellerId?: number }, quantity: number) {
+  async addItem(userId: number | string, product: CartItemInput, quantity: number) {
     const normalizedQty = Number(quantity) || 1;
     if (normalizedQty <= 0) {
       throw new BadRequestException('Quantity must be greater than 0.');
     }
 
-    const cart = this.getCart(userId);
-    const existing = cart.items.find((item) => item.productId === product.productId);
+    const cart = await this.getOrCreateCart(userId);
+    const productId = String(product.productId);
+    const existing = cart.items.find((item) => item.productId === productId);
 
     if (existing) {
-      existing.quantity += normalizedQty;
+      await this.prisma.cartItem.update({
+        where: { id: existing.id },
+        data: {
+          quantity: existing.quantity + normalizedQty,
+          price: Number(product.price ?? existing.price),
+          name: product.name || existing.name,
+          sellerId: product.sellerId ? String(product.sellerId) : existing.sellerId,
+          warehouseProductId: product.warehouseProductId ?? existing.warehouseProductId,
+        },
+      });
     } else {
-      cart.items.push({
-        productId: Number(product.productId),
-        name: product.name || `Product ${product.productId}`,
-        price: Number(product.price ?? 99.99),
-        quantity: normalizedQty,
-        sellerId: product.sellerId,
+      await this.prisma.cartItem.create({
+        data: {
+          cartId: cart.id,
+          productId,
+          warehouseProductId: product.warehouseProductId ?? null,
+          sellerId: product.sellerId ? String(product.sellerId) : null,
+          name: product.name || `Product ${productId}`,
+          price: Number(product.price ?? 99.99),
+          quantity: normalizedQty,
+        },
       });
     }
 
-    const updated = this.recalculate(cart);
-    this.carts.set(userId, updated);
-    return updated;
+    return this.getCart(userId);
   }
 
-  updateQuantity(userId: number, productId: number, quantity: number) {
-    const cart = this.getCart(userId);
-    const item = cart.items.find((entry) => entry.productId === productId);
+  async updateQuantity(userId: number | string, productId: number | string, quantity: number) {
+    const cart = await this.getOrCreateCart(userId);
+    const item = cart.items.find((entry) => entry.productId === String(productId));
 
     if (!item) {
       throw new BadRequestException('Product not found in cart.');
@@ -94,22 +133,25 @@ export class CartService {
       return this.removeItem(userId, productId);
     }
 
-    item.quantity = newQty;
-    const updated = this.recalculate(cart);
-    this.carts.set(userId, updated);
-    return updated;
+    await this.prisma.cartItem.update({
+      where: { id: item.id },
+      data: { quantity: newQty },
+    });
+
+    return this.getCart(userId);
   }
 
-  removeItem(userId: number, productId: number) {
-    const cart = this.getCart(userId);
-    cart.items = cart.items.filter((item) => item.productId !== productId);
-    const updated = this.recalculate(cart);
-    this.carts.set(userId, updated);
-    return updated;
+  async removeItem(userId: number | string, productId: number | string) {
+    const cart = await this.getOrCreateCart(userId);
+    await this.prisma.cartItem.deleteMany({
+      where: { cartId: cart.id, productId: String(productId) },
+    });
+
+    return this.getCart(userId);
   }
 
-  applyCoupon(userId: number, code: string) {
-    const cart = this.getCart(userId);
+  async applyCoupon(userId: number | string, code: string) {
+    const cart = await this.getOrCreateCart(userId);
     const normalized = (code || '').trim().toUpperCase();
 
     if (!normalized) {
@@ -120,15 +162,22 @@ export class CartService {
       throw new BadRequestException('Coupon code is invalid or expired.');
     }
 
-    cart.couponCode = normalized;
-    const updated = this.recalculate(cart);
-    this.carts.set(userId, updated);
-    return updated;
+    await this.prisma.cart.update({
+      where: { id: cart.id },
+      data: { couponCode: normalized },
+    });
+
+    return this.getCart(userId);
   }
 
-  clear(userId: number) {
-    const empty = this.buildEmptyCart(userId);
-    this.carts.set(userId, empty);
-    return empty;
+  async clear(userId: number | string) {
+    const cart = await this.getOrCreateCart(userId);
+    await this.prisma.cartItem.deleteMany({ where: { cartId: cart.id } });
+    await this.prisma.cart.update({
+      where: { id: cart.id },
+      data: { couponCode: null },
+    });
+
+    return this.getCart(userId);
   }
 }

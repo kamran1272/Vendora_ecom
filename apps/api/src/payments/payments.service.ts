@@ -1,52 +1,76 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import { PrismaService } from '../database/prisma.service';
 
 @Injectable()
 export class PaymentsService {
-  private payments: any[] = [];
   private payouts: any[] = [];
 
-  processPayment(paymentData: any) {
+  constructor(private readonly prisma: PrismaService) {}
+
+  async processPayment(paymentData: any) {
     const amount = Number(paymentData?.amount ?? 0);
 
     if (!amount || amount <= 0) {
       throw new BadRequestException('Payment amount must be greater than zero.');
     }
 
-    const payment = {
-      id: this.payments.length + 1,
-      orderId: paymentData?.orderId,
-      amount,
-      method: paymentData?.method || 'stripe',
-      status: 'completed',
-      createdAt: new Date().toISOString(),
-    };
-    this.payments.push(payment);
+    const payment = await this.prisma.payment.upsert({
+      where: { orderId: String(paymentData?.orderId) },
+      update: {
+        amount,
+        method: paymentData?.method || 'stripe',
+        status: paymentData?.status || 'COMPLETED',
+        gateway: paymentData?.gateway || 'stripe',
+        transactionId: paymentData?.transactionId || null,
+        rawResponse: paymentData?.rawResponse ? JSON.stringify(paymentData.rawResponse) : null,
+      },
+      create: {
+        orderId: String(paymentData?.orderId),
+        amount,
+        method: paymentData?.method || 'stripe',
+        status: paymentData?.status || 'COMPLETED',
+        gateway: paymentData?.gateway || 'stripe',
+        transactionId: paymentData?.transactionId || null,
+        rawResponse: paymentData?.rawResponse ? JSON.stringify(paymentData.rawResponse) : null,
+      },
+    });
+
     return payment;
   }
 
-  getPaymentStatus(orderId: number) {
-    const payment = this.payments.find((entry) => entry.orderId === orderId);
+  async getPaymentStatus(orderId: number | string) {
+    const payment = await this.prisma.payment.findUnique({
+      where: { orderId: String(orderId) },
+    });
+
     return {
-      orderId,
-      status: payment?.status || 'pending',
+      orderId: String(orderId),
+      status: payment?.status || 'PENDING',
       amount: payment?.amount || 0,
       method: payment?.method || 'stripe',
     };
   }
 
-  refund(orderId: number) {
-    const payment = this.payments.find((entry) => entry.orderId === orderId);
+  async refund(orderId: number | string) {
+    const payment = await this.prisma.payment.findUnique({
+      where: { orderId: String(orderId) },
+    });
+
     if (!payment) {
       throw new BadRequestException('Payment record not found.');
     }
 
-    const refund = {
-      orderId,
-      status: 'refunded',
-      amount: payment.amount,
+    const refunded = await this.prisma.payment.update({
+      where: { id: payment.id },
+      data: { status: 'REFUNDED' },
+    });
+
+    return {
+      orderId: String(orderId),
+      status: refunded.status,
+      amount: refunded.amount,
       refundedAt: new Date().toISOString(),
     };
-    return refund;
   }
 
   createPayout(sellerId: number, amount: number, method: string) {

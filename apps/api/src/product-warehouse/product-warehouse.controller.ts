@@ -9,6 +9,12 @@ import { ProductWarehouseService } from './product-warehouse.service';
 export class ProductWarehouseController {
   constructor(private readonly warehouse: ProductWarehouseService) {}
 
+  @Get('public/products')
+  publicList(@Query() query: any) { return this.warehouse.listPublicProducts(query); }
+
+  @Get('public/products/:id')
+  publicGet(@Param('id') id: string) { return this.warehouse.getPublicProduct(id); }
+
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.SELLER)
   @Get('seller/product-warehouse')

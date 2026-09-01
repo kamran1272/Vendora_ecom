@@ -48,7 +48,7 @@ NODE_ENV=development
 PORT=4003
 DB_TYPE=sqlite
 DATABASE_URL="file:./data/dev.sqlite"
-JWT_SECRET=vendora-super-secret-key-2024
+JWT_SECRET=replace-with-a-long-random-secret
 JWT_EXPIRES_IN=7d
 THROTTLE_TTL=60
 THROTTLE_LIMIT=120
@@ -62,7 +62,7 @@ NODE_ENV=development
 PORT=4003
 DATABASE_URL="file:./apps/api/data/dev.sqlite"
 DB_TYPE=sqlite
-JWT_SECRET=vendora-super-secret-key-2024
+JWT_SECRET=replace-with-a-long-random-secret
 JWT_EXPIRES_IN=7d
 REDIS_URL=redis://localhost:6379
 ```

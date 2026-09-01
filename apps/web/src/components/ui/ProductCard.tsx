@@ -1,6 +1,11 @@
+import { Link } from 'react-router-dom'
+import { useCartStore } from '@/store/cart'
+import { useWishlistStore } from '@/store/wishlist'
+
 type ProductCardProps = {
   product: {
     id?: string
+    slug?: string
     name: string
     price: number
     oldPrice?: number
@@ -22,65 +27,70 @@ type ProductCardProps = {
 }
 
 export function ProductCard({ product }: ProductCardProps) {
-  const currentPrice = product.price
-  const oldPrice = product.oldPrice ?? currentPrice
-  const discountPercent = product.discountPercent ?? Math.max(0, Math.round(((oldPrice - currentPrice) / oldPrice) * 100))
+  const addItem = useCartStore((state) => state.addItem)
+  const toggleWishlist = useWishlistStore((state) => state.toggle)
+  const isSaved = useWishlistStore((state) => state.ids.includes(product.id ?? product.slug ?? product.name))
+
+  const currentPrice = Number(product.price)
+  const oldPrice = Number(product.oldPrice ?? currentPrice)
+  const discountPercent = product.discountPercent ?? Math.max(0, Math.round(((oldPrice - currentPrice) / Math.max(oldPrice, 1)) * 100))
   const reviewCount = product.reviewCount ?? 0
   const badgeText = product.badge || (product.flashSale ? 'Flash sale' : product.isNew ? 'New' : product.isFeatured ? 'Featured' : 'Popular')
   const sellerName = product.shop || product.seller || 'Vendora seller'
+  const productId = product.id ?? product.slug ?? product.name
+  const productHref = product.id ? `/products/${product.id}` : product.slug ? `/products/${product.slug}` : '/products'
 
   return (
     <article className="group overflow-hidden rounded-[1.7rem] border border-slate-200 bg-white shadow-sm transition duration-200 hover:-translate-y-1 hover:shadow-xl">
       <div className="relative">
-        <div
-          className="relative h-52 bg-gradient-to-br from-slate-200 via-slate-100 to-slate-50"
-          style={
-            product.imageUrl
-              ? { backgroundImage: `url(${product.imageUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
-              : undefined
-          }
-        >
-          <div className="absolute left-3 top-3 flex flex-wrap gap-2">
-            {discountPercent > 0 && (
-              <span className="rounded-full bg-[#f59a36] px-2.5 py-1 text-[0.62rem] font-bold uppercase tracking-[0.12em] text-white">
-                -{discountPercent}%
-              </span>
-            )}
-            {badgeText && (
-              <span className="rounded-full bg-slate-900/80 px-2.5 py-1 text-[0.62rem] font-bold uppercase tracking-[0.12em] text-white backdrop-blur-sm">
-                {badgeText}
-              </span>
-            )}
-          </div>
+        <Link to={productHref} className="block">
+          <div
+            className="relative h-52 bg-gradient-to-br from-slate-200 via-slate-100 to-slate-50"
+            style={
+              product.imageUrl
+                ? { backgroundImage: `url(${product.imageUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+                : undefined
+            }
+          >
+            <div className="absolute left-3 top-3 flex flex-wrap gap-2">
+              {discountPercent > 0 && (
+                <span className="rounded-full bg-[#f59a36] px-2.5 py-1 text-[0.62rem] font-bold uppercase tracking-[0.12em] text-white">
+                  -{discountPercent}%
+                </span>
+              )}
+              {badgeText && (
+                <span className="rounded-full bg-slate-900/80 px-2.5 py-1 text-[0.62rem] font-bold uppercase tracking-[0.12em] text-white backdrop-blur-sm">
+                  {badgeText}
+                </span>
+              )}
+            </div>
 
-          <div className="absolute right-3 top-3 flex gap-2">
-            <button
-              type="button"
-              className="flex h-9 w-9 items-center justify-center rounded-full border border-white/80 bg-white/90 text-lg text-slate-700 shadow-sm transition hover:bg-white"
-              aria-label="Add to wishlist"
-            >
-              ♡
-            </button>
-            <button
-              type="button"
-              className="flex h-9 w-9 items-center justify-center rounded-full border border-white/80 bg-white/90 text-lg text-slate-700 shadow-sm transition hover:bg-white"
-              aria-label="Compare product"
-            >
-              ⇄
-            </button>
-          </div>
-
-          {product.quickView && (
-            <div className="absolute inset-x-3 bottom-3">
+            <div className="absolute right-3 top-3 flex gap-2">
               <button
                 type="button"
-                className="w-full rounded-full bg-white/90 px-3 py-2 text-sm font-semibold text-slate-800 shadow-sm backdrop-blur-sm transition hover:bg-white"
+                className={`flex h-9 w-9 items-center justify-center rounded-full border border-white/80 bg-white/90 text-lg shadow-sm transition hover:bg-white ${isSaved ? 'text-[#f59a36]' : 'text-slate-700'}`}
+                aria-label="Add to wishlist"
+                onClick={(event) => {
+                  event.preventDefault()
+                  toggleWishlist(productId)
+                }}
               >
-                Quick view
+                {isSaved ? '♥' : '♡'}
               </button>
             </div>
-          )}
-        </div>
+
+            {product.quickView && (
+              <div className="absolute inset-x-3 bottom-3">
+                <button
+                  type="button"
+                  className="w-full rounded-full bg-white/90 px-3 py-2 text-sm font-semibold text-slate-800 shadow-sm backdrop-blur-sm transition hover:bg-white"
+                >
+                  Quick view
+                </button>
+              </div>
+            )}
+          </div>
+        </Link>
       </div>
 
       <div className="space-y-4 p-5">
@@ -95,7 +105,9 @@ export function ProductCard({ product }: ProductCardProps) {
 
         <div>
           <p className="text-sm text-slate-500">{sellerName}</p>
-          <h3 className="mt-2 line-clamp-2 text-xl font-bold leading-snug text-slate-900">{product.name}</h3>
+          <Link to={productHref} className="mt-2 block text-xl font-bold leading-snug text-slate-900 hover:text-[#1f2d4d]">
+            {product.name}
+          </Link>
         </div>
 
         <div className="flex items-center gap-2 text-sm text-slate-600">
@@ -117,16 +129,18 @@ export function ProductCard({ product }: ProductCardProps) {
         <div className="flex items-center justify-between gap-3 pt-2">
           <button
             type="button"
-            className="flex-1 rounded-full bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+            className="flex-1 rounded-full bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+            disabled={product.inStock === false}
+            onClick={() => addItem({
+              id: productId,
+              name: product.name,
+              price: currentPrice,
+              shop: sellerName,
+              imageUrl: product.imageUrl,
+              quantity: 1,
+            })}
           >
-            Add to cart
-          </button>
-          <button
-            type="button"
-            className="flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-lg text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
-            aria-label="Compare product"
-          >
-            ⇄
+            {product.inStock === false ? 'Out of stock' : 'Add to cart'}
           </button>
         </div>
       </div>

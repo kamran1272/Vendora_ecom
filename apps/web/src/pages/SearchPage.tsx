@@ -1,10 +1,12 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { ProductCard } from '@/components/ui/ProductCard'
 import { marketplaceSearchCatalog, searchSortOptions } from '@/data/marketplace'
+import { fetchMarketplaceProducts } from '@/services/marketplace'
 
 export function SearchPage() {
   const [searchParams, setSearchParams] = useSearchParams()
+  const [apiProducts, setApiProducts] = useState<Array<typeof marketplaceSearchCatalog[number]>>([])
 
   const keyword = (searchParams.get('q') ?? searchParams.get('search') ?? '').trim().toLowerCase()
   const category = searchParams.get('category') ?? 'all'
@@ -16,8 +18,36 @@ export function SearchPage() {
   const availability = searchParams.get('availability') ?? 'all'
   const sort = searchParams.get('sort') ?? 'relevance'
 
+  useEffect(() => {
+    let active = true
+
+    fetchMarketplaceProducts({
+      search: keyword || undefined,
+      category: category === 'all' ? undefined : category,
+      brand: brand === 'all' ? undefined : brand,
+      sort: sort === 'relevance' ? undefined : sort,
+      limit: 200,
+    })
+      .then((response) => {
+        if (active) {
+          setApiProducts(response.items)
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setApiProducts([])
+        }
+      })
+
+    return () => {
+      active = false
+    }
+  }, [keyword, category, brand, sort])
+
+  const sourceProducts = apiProducts.length > 0 ? apiProducts : marketplaceSearchCatalog
+
   const filteredProducts = useMemo(() => {
-    let results = [...marketplaceSearchCatalog]
+    let results = [...sourceProducts]
 
     if (keyword) {
       results = results.filter((product) =>
@@ -25,7 +55,7 @@ export function SearchPage() {
         product.category.toLowerCase().includes(keyword) ||
         product.brand.toLowerCase().includes(keyword) ||
         product.seller.toLowerCase().includes(keyword) ||
-        product.attributes.some((attribute) => attribute.toLowerCase().includes(keyword))
+        (product.attributes || []).some((attribute) => attribute.toLowerCase().includes(keyword))
       )
     }
 
@@ -60,7 +90,7 @@ export function SearchPage() {
           return bScore - aScore
         })
     }
-  }, [keyword, category, brand, seller, priceMin, priceMax, minRating, availability, sort])
+  }, [sourceProducts, keyword, category, brand, seller, priceMin, priceMax, minRating, availability, sort])
 
   const updateParam = (key: string, value: string) => {
     const next = new URLSearchParams(searchParams)
@@ -72,9 +102,9 @@ export function SearchPage() {
     setSearchParams(next)
   }
 
-  const categories = ['all', ...new Set(marketplaceSearchCatalog.map((product) => product.category))]
-  const brands = ['all', ...new Set(marketplaceSearchCatalog.map((product) => product.brand))]
-  const sellers = ['all', ...new Set(marketplaceSearchCatalog.map((product) => product.seller))]
+  const categories = ['all', ...new Set(sourceProducts.map((product) => product.category))]
+  const brands = ['all', ...new Set(sourceProducts.map((product) => product.brand))]
+  const sellers = ['all', ...new Set(sourceProducts.map((product) => product.seller))]
 
   return (
     <div className="space-y-6">

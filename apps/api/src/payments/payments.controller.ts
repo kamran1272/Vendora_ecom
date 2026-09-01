@@ -27,11 +27,11 @@ export class PaymentsController {
 
   @Get('order/:orderId')
   getPaymentStatus(@Param('orderId') orderId: string) {
-    return this.paymentsService.getPaymentStatus(Number(orderId));
+    return this.paymentsService.getPaymentStatus(orderId);
   }
 
   @Post(':orderId/refund')
   refund(@Param('orderId') orderId: string) {
-    return this.paymentsService.refund(Number(orderId));
+    return this.paymentsService.refund(orderId);
   }
 }

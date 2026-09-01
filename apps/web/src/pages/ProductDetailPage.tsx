@@ -1,7 +1,9 @@
+import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ProductGallery } from '@/components/product/ProductGallery'
 import { ProductInfoPanel } from '@/components/product/ProductInfoPanel'
 import { ProductCard } from '@/components/ui/ProductCard'
+import { fetchMarketplaceProduct } from '@/services/marketplace'
 
 const productCatalog = [
   {
@@ -102,7 +104,29 @@ const recentlyViewed = [
 export function ProductDetailPage() {
   const { id, slug } = useParams()
   const productId = id ?? slug ?? 'smart-speaker'
-  const product = productCatalog.find((item) => item.id === productId) ?? productCatalog[0]
+  const [marketplaceProduct, setMarketplaceProduct] = useState<any>(null)
+
+  useEffect(() => {
+    let active = true
+
+    fetchMarketplaceProduct(productId)
+      .then((product) => {
+        if (active) {
+          setMarketplaceProduct(product)
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setMarketplaceProduct(null)
+        }
+      })
+
+    return () => {
+      active = false
+    }
+  }, [productId])
+
+  const product = marketplaceProduct ?? productCatalog.find((item) => item.id === productId) ?? productCatalog[0]
 
   return (
     <div className="space-y-8 pb-10">

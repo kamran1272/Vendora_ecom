@@ -19,6 +19,6 @@ export class ShippingController {
 
   @Get('track/:shipmentId')
   trackShipment(@Param('shipmentId') shipmentId: string) {
-    return this.shippingService.trackShipment(Number(shipmentId));
+    return this.shippingService.trackShipment(shipmentId);
   }
 }

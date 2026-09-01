@@ -1,26 +1,51 @@
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Header } from '@/components/layout/Header'
 import { ProductCard } from '@/components/ui/ProductCard'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { StatCard } from '@/components/ui/StatCard'
 import { brandItems, categoryItems, homepageConfig, productItems } from '@/data/marketplace'
+import { fetchMarketplaceProducts } from '@/services/marketplace'
 
 export function HomePage() {
-  const visibleSections = [...homepageConfig]
-    .filter((section) => section.enabled)
-    .sort((a, b) => a.order - b.order)
+  const [marketplaceProducts, setMarketplaceProducts] = useState<typeof productItems>([])
+
+  useEffect(() => {
+    let active = true
+
+    fetchMarketplaceProducts({ limit: 12 })
+      .then((response) => {
+        if (active) {
+          setMarketplaceProducts(response.items as typeof productItems)
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setMarketplaceProducts([])
+        }
+      })
+
+    return () => {
+      active = false
+    }
+  }, [])
+
+  const visibleSections = useMemo(
+    () => [...homepageConfig].filter((section) => section.enabled).sort((a, b) => a.order - b.order),
+    [],
+  )
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <Header />
       <main className="mx-auto max-w-7xl space-y-10 px-4 py-10">
-        {visibleSections.map((section) => renderSection(section))}
+        {visibleSections.map((section) => renderSection(section, marketplaceProducts))}
       </main>
     </div>
   )
 }
 
-function renderSection(section: (typeof homepageConfig)[number]) {
+function renderSection(section: (typeof homepageConfig)[number], marketplaceProducts: typeof productItems) {
   switch (section.type) {
     case 'hero':
       return (
@@ -95,16 +120,36 @@ function renderSection(section: (typeof homepageConfig)[number]) {
       )
 
     case 'products': {
+      const fallbackProducts = productItems
+      const sourceProducts = marketplaceProducts.length ? marketplaceProducts : fallbackProducts
       const selected = (section.productIds || []).length > 0
-        ? productItems.filter((product) => section.productIds?.includes(product.id))
-        : productItems
+        ? sourceProducts.filter((product) => {
+            const normalizedProductId = (product as { id?: string; slug?: string; name?: string }).id ?? (product as { id?: string; slug?: string; name?: string }).slug ?? ''
+            const normalizedName = (product as { name?: string }).name?.toLowerCase().replace(/\s+/g, '-') ?? ''
+            return section.productIds?.some((id) => id === normalizedProductId || id === normalizedName)
+          })
+        : sourceProducts
 
       return (
         <section key={section.id} className="space-y-6">
           <SectionHeader eyebrow={section.eyebrow} title={section.title} subtitle={section.subtitle} actionLabel="View all" actionTo="/products" />
           <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-            {selected.map((product) => (
-              <ProductCard key={product.id} product={{ name: product.name, price: product.price, shop: product.shop, badge: product.badge, rating: product.rating, inStock: product.inStock, category: product.category }} />
+            {selected.slice(0, 6).map((product) => (
+              <ProductCard
+                key={(product as { id?: string; slug?: string; name?: string }).id ?? (product as { id?: string; slug?: string; name?: string }).slug ?? (product as { name: string }).name}
+                product={{
+                  id: (product as { id?: string }).id,
+                  slug: (product as { slug?: string }).slug,
+                  name: (product as { name: string }).name,
+                  price: Number((product as { price: number | string }).price),
+                  shop: (product as { shop?: string }).shop ?? (product as { seller?: string }).seller,
+                  badge: (product as { badge?: string }).badge,
+                  rating: Number((product as { rating?: number }).rating ?? 4.8),
+                  inStock: (product as { inStock?: boolean }).inStock ?? true,
+                  category: (product as { category?: string }).category,
+                  imageUrl: (product as { images?: string[] }).images?.[0],
+                }}
+              />
             ))}
           </div>
         </section>

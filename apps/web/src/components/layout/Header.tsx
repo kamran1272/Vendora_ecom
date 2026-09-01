@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { apiNavigationItems, headerActions } from '@/data/marketplace'
+import { useCartStore } from '@/store/cart'
 
 function VendoraLogo({ compact = false }: { compact?: boolean }) {
   return (
@@ -40,6 +41,7 @@ function VendoraLogo({ compact = false }: { compact?: boolean }) {
 
 export function Header() {
   const navigation = apiNavigationItems.filter((item) => item.enabled)
+  const cartCount = useCartStore((state) => state.items.reduce((sum, item) => sum + item.quantity, 0))
 
   return (
     <header className="border-b border-slate-200 bg-white/90 backdrop-blur">
@@ -66,12 +68,20 @@ export function Header() {
           </div>
 
           <div className="flex shrink-0 items-center gap-3">
-            {headerActions.map((action) => (
-              <Link key={action.key} to={action.href} className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50">
-                <span>{action.icon}</span>
-                <span>{action.label}</span>
-              </Link>
-            ))}
+            {headerActions.map((action) => {
+              const isCart = action.key === 'cart'
+              return (
+                <Link key={action.key} to={action.href} className="relative flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50">
+                  <span>{action.icon}</span>
+                  <span>{action.label}</span>
+                  {isCart && cartCount > 0 && (
+                    <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-[#f59a36] px-1 text-[10px] font-bold text-white">
+                      {cartCount}
+                    </span>
+                  )}
+                </Link>
+              )
+            })}
           </div>
         </div>
 

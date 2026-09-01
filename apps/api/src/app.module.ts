@@ -1,8 +1,7 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
-import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
@@ -24,7 +23,6 @@ import { SettingsModule } from './settings/settings.module';
 import { AdminModule } from './admin/admin.module';
 import { HealthController } from './health.controller';
 import { PrismaModule } from './database/prisma.module';
-import { getDatabaseConfig } from './database/config/database.config';
 import { ProductWarehouseModule } from './product-warehouse/product-warehouse.module';
 
 @Module({
@@ -39,11 +37,6 @@ import { ProductWarehouseModule } from './product-warehouse/product-warehouse.mo
         limit: 120,
       },
     ]),
-    TypeOrmModule.forRootAsync({
-      imports: [ConfigModule],
-      inject: [ConfigService],
-      useFactory: (configService: ConfigService) => getDatabaseConfig(configService),
-    }),
     PrismaModule,
     AuthModule,
     UsersModule,

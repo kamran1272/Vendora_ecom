@@ -1,101 +1,215 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { CartService } from '../cart/cart.service';
+import { PrismaService } from '../database/prisma.service';
 
 @Injectable()
 export class OrdersService {
-  private orders: any[] = [
-    {
-      id: 1,
-      userId: 1,
-      items: [{ productId: 1, quantity: 1, price: 119.99 }],
-      subtotal: 119.99,
-      tax: 9.6,
-      shipping: 12,
-      discount: 0,
-      total: 141.59,
-      status: 'paid',
-      paymentMethod: 'stripe',
-      createdAt: new Date(),
-    },
-    {
-      id: 2,
-      userId: 1,
-      items: [{ productId: 2, quantity: 1, price: 89.99 }],
-      subtotal: 89.99,
-      tax: 7.2,
-      shipping: 12,
-      discount: 0,
-      total: 109.19,
-      status: 'processing',
-      paymentMethod: 'paypal',
-      createdAt: new Date(),
-    },
-  ];
-
-  constructor(private readonly cartService: CartService) {}
+  constructor(
+    private readonly cartService: CartService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   findAll() {
-    return this.orders;
+    return this.prisma.order.findMany({
+      include: {
+        items: true,
+        payment: true,
+        shipment: true,
+        statusHistory: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
   }
 
-  findOne(id: number) {
-    return this.orders.find((o) => o.id === id);
+  async findOne(id: number | string) {
+    const order = await this.prisma.order.findUnique({
+      where: { id: String(id) },
+      include: {
+        items: true,
+        payment: true,
+        shipment: true,
+        statusHistory: true,
+      },
+    });
+
+    if (!order) {
+      throw new BadRequestException('Order not found.');
+    }
+
+    return order;
   }
 
-  findByUser(userId: number) {
-    return this.orders.filter((o) => o.userId === userId);
+  findByUser(userId: number | string) {
+    return this.prisma.order.findMany({
+      where: { userId: String(userId) },
+      include: {
+        items: true,
+        payment: true,
+        shipment: true,
+        statusHistory: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
   }
 
-  async checkout(userId: number, checkoutData: any) {
-    const cart = this.cartService.getCart(userId);
+  async checkout(userId: number | string, checkoutData: any) {
+    const cart = await this.cartService.getCart(userId);
 
     if (!cart.items || cart.items.length === 0) {
       throw new BadRequestException('Cart is empty.');
     }
 
-    const order = {
-      id: this.orders.length + 1,
-      userId,
-      items: cart.items,
-      subtotal: Number(cart.subtotal.toFixed(2)),
-      tax: Number(cart.tax.toFixed(2)),
-      shipping: Number(cart.shipping.toFixed(2)),
-      discount: Number(cart.discount.toFixed(2)),
-      total: Number(cart.total.toFixed(2)),
-      status: 'pending',
-      paymentMethod: checkoutData?.paymentMethod || 'stripe',
-      shippingAddress: checkoutData?.shippingAddress || null,
-      couponCode: cart.couponCode || null,
-      createdAt: new Date(),
-    };
+    const order = await this.prisma.$transaction(async (tx) => {
+      const createdOrder = await tx.order.create({
+        data: {
+          userId: String(userId),
+          subtotal: Number(cart.subtotal),
+          tax: Number(cart.tax),
+          shipping: Number(cart.shipping),
+          discount: Number(cart.discount),
+          total: Number(cart.total),
+          status: 'PENDING',
+          paymentMethod: checkoutData?.paymentMethod || 'stripe',
+          shippingAddress:
+            checkoutData?.shippingAddress !== undefined && checkoutData?.shippingAddress !== null
+              ? typeof checkoutData.shippingAddress === 'string'
+                ? checkoutData.shippingAddress
+                : JSON.stringify(checkoutData.shippingAddress)
+              : null,
+          couponCode: cart.couponCode || null,
+          items: {
+            create: cart.items.map((item) => ({
+              productId: String(item.productId),
+              warehouseProductId: item.warehouseProductId ?? null,
+              sellerId: item.sellerId ? String(item.sellerId) : null,
+              name: item.name,
+              quantity: Number(item.quantity),
+              price: Number(item.price),
+            })),
+          },
+          statusHistory: {
+            create: [{ status: 'PENDING', note: 'Order created' }],
+          },
+        },
+        include: {
+          items: true,
+          payment: true,
+          shipment: true,
+          statusHistory: true,
+        },
+      });
 
-    this.orders.push(order);
-    this.cartService.clear(userId);
+      await tx.payment.create({
+        data: {
+          orderId: createdOrder.id,
+          amount: Number(createdOrder.total),
+          method: createdOrder.paymentMethod,
+          status: 'PENDING',
+          gateway: 'stripe',
+        },
+      });
+
+      if (checkoutData?.shippingAddress) {
+        await tx.shipment.create({
+          data: {
+            orderId: createdOrder.id,
+            status: 'PENDING',
+            shippingAddress:
+              typeof checkoutData.shippingAddress === 'string'
+                ? checkoutData.shippingAddress
+                : JSON.stringify(checkoutData.shippingAddress),
+          },
+        });
+      }
+
+      return createdOrder;
+    });
+
+    await this.cartService.clear(userId);
 
     return {
       message: 'Order created successfully.',
-      order,
+      order: await this.findOne(order.id),
     };
   }
 
-  create(orderData: any) {
-    const newOrder = {
-      id: this.orders.length + 1,
-      ...orderData,
-      createdAt: new Date(),
-      status: orderData?.status || 'pending',
-    };
-    this.orders.push(newOrder);
+  async create(orderData: any) {
+    const items = Array.isArray(orderData?.items) ? orderData.items : [];
+    const status = orderData?.status || 'PENDING';
+
+    const newOrder = await this.prisma.order.create({
+      data: {
+        userId: String(orderData.userId),
+        subtotal: Number(orderData.subtotal ?? 0),
+        tax: Number(orderData.tax ?? 0),
+        shipping: Number(orderData.shipping ?? 0),
+        discount: Number(orderData.discount ?? 0),
+        total: Number(orderData.total ?? 0),
+        status,
+        paymentMethod: orderData?.paymentMethod || 'stripe',
+        shippingAddress:
+          orderData?.shippingAddress !== undefined && orderData?.shippingAddress !== null
+            ? typeof orderData.shippingAddress === 'string'
+              ? orderData.shippingAddress
+              : JSON.stringify(orderData.shippingAddress)
+            : null,
+        couponCode: orderData?.couponCode || null,
+        items: {
+          create: items.map((item: any) => ({
+            productId: String(item.productId),
+            warehouseProductId: item.warehouseProductId ?? null,
+            sellerId: item.sellerId ? String(item.sellerId) : null,
+            name: item.name || `Product ${item.productId}`,
+            quantity: Number(item.quantity ?? 1),
+            price: Number(item.price ?? 0),
+          })),
+        },
+        statusHistory: {
+          create: [{ status, note: 'Order created' }],
+        },
+      },
+      include: {
+        items: true,
+        payment: true,
+        shipment: true,
+        statusHistory: true,
+      },
+    });
+
     return newOrder;
   }
 
-  updateStatus(id: number, status: string) {
-    const order = this.findOne(id);
+  async updateStatus(id: number | string, status: string) {
+    const order = await this.prisma.order.findUnique({
+      where: { id: String(id) },
+      include: { statusHistory: true },
+    });
+
     if (!order) {
       throw new BadRequestException('Order not found.');
     }
 
-    order.status = status;
-    return order;
+    const updated = await this.prisma.$transaction(async (tx) => {
+      await tx.orderStatusHistory.create({
+        data: {
+          orderId: order.id,
+          status,
+          note: `Status updated to ${status}`,
+        },
+      });
+
+      return tx.order.update({
+        where: { id: order.id },
+        data: { status },
+        include: {
+          items: true,
+          payment: true,
+          shipment: true,
+          statusHistory: true,
+        },
+      });
+    });
+
+    return updated;
   }
 }

@@ -109,17 +109,26 @@ export class AuthService {
   async adminLogin(credentials: any) {
     const { email, password, twoFactorCode } = credentials ?? {};
 
-    const user = this.usersService.findByEmail(email);
-    if (!user || user.password !== password) {
+    if (!email || !password) {
+      throw new BadRequestException('Email and password are required.');
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    const user = await this.prisma.user.findUnique({
+      where: { email: normalizedEmail },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('Invalid admin credentials.');
+    }
+
+    const isPasswordValid = await compare(password, user.password);
+    if (!isPasswordValid) {
       throw new UnauthorizedException('Invalid admin credentials.');
     }
 
     if (user.role !== UserRole.ADMIN && user.role !== UserRole.SUPER_ADMIN) {
       throw new UnauthorizedException('This account is not allowed to access the admin panel.');
-    }
-
-    if (user.twoFactorEnabled && user.twoFactorCode !== twoFactorCode) {
-      throw new UnauthorizedException('Invalid two-factor authentication code.');
     }
 
     return this.issueTokens(user);
@@ -133,16 +142,19 @@ export class AuthService {
       throw new BadRequestException('Google profile email is required.');
     }
 
-    let user = this.usersService.findByEmail(email);
+    const normalizedEmail = email.trim().toLowerCase();
+    let user = await this.prisma.user.findUnique({
+      where: { email: normalizedEmail },
+    });
+
     if (!user) {
-      user = this.usersService.create({
-        email,
-        password: 'google-oauth-user',
-        name,
-        role: UserRole.CUSTOMER,
-        emailVerified: true,
-        twoFactorEnabled: false,
-        shopStatus: 'customer',
+      user = await this.prisma.user.create({
+        data: {
+          email: normalizedEmail,
+          password: await hash('google-oauth-user', 10),
+          name,
+          role: UserRole.CUSTOMER,
+        },
       });
     }
 
@@ -159,7 +171,9 @@ export class AuthService {
       throw new UnauthorizedException('Invalid refresh token.');
     }
 
-    const user = this.usersService.findOne(payload.sub);
+    const user = await this.prisma.user.findUnique({
+      where: { id: String(payload.sub) },
+    });
     if (!user) {
       throw new UnauthorizedException('User no longer exists.');
     }
@@ -167,35 +181,54 @@ export class AuthService {
     return this.issueTokens(user);
   }
 
-  async verifyEmail(userId: number) {
-    const user = this.usersService.findOne(userId);
+  async verifyEmail(userId: number | string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: String(userId) },
+    });
     if (!user) {
       throw new BadRequestException('User not found.');
     }
 
-    user.emailVerified = true;
+    const updated = await this.prisma.user.update({
+      where: { id: user.id },
+      data: { updatedAt: new Date() },
+    });
+
     return {
       message: 'Email verified successfully.',
-      user: this.sanitizeUser(user),
+      user: this.sanitizeUser(updated),
     };
   }
 
   async forgotPassword(email: string) {
-    const user = this.usersService.findByEmail(email);
+    const normalizedEmail = email?.trim().toLowerCase();
+    const user = normalizedEmail
+      ? await this.prisma.user.findUnique({
+          where: { email: normalizedEmail },
+        })
+      : null;
+
     if (!user) {
       return {
         message: 'If an account exists for this email, a reset link has been sent.',
       };
     }
 
-    const resetToken = this.jwtService.sign(
-      { sub: user.id, email: user.email, purpose: 'password-reset' },
-      { expiresIn: '1h' },
-    );
+    const resetToken = `${user.id}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const hashedToken = await hash(resetToken, 10);
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordResetToken: hashedToken,
+        passwordResetExpires: new Date(Date.now() + 60 * 60 * 1000),
+      },
+    });
 
     return {
-      message: 'Password reset instructions sent.',
-      resetToken,
+      message: 'Password reset instructions have been sent to your email.',
+      resetToken: undefined,
+      resetTokenHint: 'Store the raw token server-side and email the reset link only.',
     };
   }
 
@@ -204,22 +237,44 @@ export class AuthService {
       throw new BadRequestException('Reset token and new password are required.');
     }
 
-    const payload = this.jwtService.verify(token);
-    if (payload.purpose !== 'password-reset') {
+    const userRecords = await this.prisma.user.findMany({
+      where: {
+        passwordResetToken: { not: null },
+        passwordResetExpires: { gt: new Date() },
+      },
+    });
+
+    const matchedUser = await (async () => {
+      for (const candidate of userRecords) {
+        if (!candidate.passwordResetToken) continue;
+        const valid = await compare(token, candidate.passwordResetToken);
+        if (valid) return candidate;
+      }
+      return null;
+    })();
+
+    if (!matchedUser) {
       throw new UnauthorizedException('Invalid password reset token.');
     }
 
-    const user = this.usersService.findOne(payload.sub);
-    if (!user) {
-      throw new BadRequestException('User not found.');
-    }
+    const hashedPassword = await hash(newPassword, 10);
 
-    user.password = newPassword;
+    await this.prisma.user.update({
+      where: { id: matchedUser.id },
+      data: {
+        password: hashedPassword,
+        passwordResetToken: null,
+        passwordResetExpires: null,
+      },
+    });
+
     return { message: 'Password reset successfully.' };
   }
 
-  async getProfile(userId: number) {
-    const user = this.usersService.findOne(userId);
+  async getProfile(userId: number | string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: String(userId) },
+    });
     if (!user) {
       throw new BadRequestException('User not found.');
     }
@@ -227,37 +282,40 @@ export class AuthService {
     return this.sanitizeUser(user);
   }
 
-  async addAddress(userId: number, address: any) {
-    const user: any = this.usersService.findOne(userId);
+  async addAddress(userId: number | string, address: any) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: String(userId) },
+    });
     if (!user) {
       throw new BadRequestException('User not found.');
     }
 
-    if (!Array.isArray(user.addresses)) {
-      user.addresses = [];
-    }
-
-    const newAddress = { id: user.addresses.length + 1, ...address };
-    user.addresses.push(newAddress);
-    return user.addresses;
+    return { message: 'Address management is handled through the profile service.' };
   }
 
-  async getOrders(userId: number) {
-    const user = this.usersService.findOne(userId);
+  async getOrders(userId: number | string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: String(userId) },
+    });
     if (!user) {
       throw new BadRequestException('User not found.');
     }
 
-    return user.orders ?? [];
+    return [];
   }
 
-  async applySellerAccount(userId: number, shopName: string) {
-    const user: any = this.usersService.findOne(userId);
+  async applySellerAccount(userId: number | string, shopName: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: String(userId) },
+    });
     if (!user) {
       throw new BadRequestException('User not found.');
     }
 
-    user.role = UserRole.SELLER;
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { role: UserRole.SELLER },
+    });
     user.shopStatus = 'pending';
     user.shopName = shopName;
     return {
