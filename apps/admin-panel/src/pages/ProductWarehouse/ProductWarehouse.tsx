@@ -1,7 +1,7 @@
 ﻿import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import axios from 'axios'
-import { CheckCircle2, Download, Eye, Pencil, Search, Trash2, X } from 'lucide-react'
+import { CheckCircle2, Download, Eye, ImageOff, Pencil, RefreshCw, Search, Trash2, X } from 'lucide-react'
 import { AdminLayout } from '../../layouts/AdminLayout'
 
 type Product = {
@@ -74,6 +74,7 @@ export function ProductWarehouse() {
 		stock: '',
 	})
 	const [error, setError] = useState('')
+	const [loading, setLoading] = useState(true)
 	const [summary, setSummary] = useState<Summary | null>(null)
 	const [providers, setProviders] = useState<Array<{ id: string; label: string }>>([])
 	const [provider, setProvider] = useState('dummyjson')
@@ -89,6 +90,9 @@ export function ProductWarehouse() {
 	const [catalogCategory, setCatalogCategory] = useState('')
 	const [catalogBrand, setCatalogBrand] = useState('')
 	const [catalogStatus, setCatalogStatus] = useState('')
+	const [catalogProvider, setCatalogProvider] = useState('')
+	const [catalogStock, setCatalogStock] = useState('')
+	const [catalogImportedAfter, setCatalogImportedAfter] = useState('')
 	const [previewProduct, setPreviewProduct] = useState<Product | null>(null)
 	const [editingProduct, setEditingProduct] = useState<Product | null>(null)
 	const [savingProduct, setSavingProduct] = useState(false)
@@ -96,9 +100,10 @@ export function ProductWarehouse() {
 	const [brands, setBrands] = useState<string[]>([])
 
 	const load = async () => {
+		setLoading(true)
 		try {
 			const [productResponse, planResponse, summaryResponse, providerResponse, historyResponse] = await Promise.all([
-				api.get('/admin/product-warehouse', { params: { limit: 100, search: catalogSearch, category: catalogCategory, brand: catalogBrand, status: catalogStatus } }),
+				api.get('/admin/product-warehouse', { params: { limit: 100, search: catalogSearch, category: catalogCategory, brand: catalogBrand, provider: catalogProvider, stockStatus: catalogStock, importedAfter: catalogImportedAfter, status: catalogStatus } }),
 				api.get('/admin/subscription-plans'),
 				api.get('/admin/product-warehouse/summary'),
 				api.get('/admin/product-warehouse/providers'),
@@ -136,6 +141,8 @@ export function ProductWarehouse() {
 			setError('')
 		} catch {
 			setError('Unable to load warehouse management data.')
+		} finally {
+			setLoading(false)
 		}
 	}
 
@@ -174,7 +181,7 @@ export function ProductWarehouse() {
 
 	useEffect(() => {
 		void load()
-	}, [catalogSearch, catalogCategory, catalogBrand, catalogStatus])
+	}, [catalogSearch, catalogCategory, catalogBrand, catalogProvider, catalogStock, catalogImportedAfter, catalogStatus])
 
 	const createProduct = async (event: FormEvent) => {
 		event.preventDefault()
@@ -203,6 +210,25 @@ export function ProductWarehouse() {
 			await load()
 		} catch {
 			setError('Unable to update warehouse product status.')
+		}
+	}
+
+	const archive = async (product: Product) => {
+		try {
+			await api.patch(`/admin/product-warehouse/${product.id}`, { status: 'ARCHIVED' })
+			await load()
+		} catch {
+			setError('Unable to archive warehouse product.')
+		}
+	}
+
+	const resync = async (product: Product) => {
+		if (!product.sourceId || !product.externalProductId || product.sourceId === 'manual') return
+		try {
+			await api.post('/admin/product-warehouse/import', { provider: product.sourceId, externalIds: [product.externalProductId] })
+			await load()
+		} catch {
+			setError('Unable to re-sync this warehouse product.')
 		}
 	}
 
@@ -275,7 +301,7 @@ export function ProductWarehouse() {
 						<div className="flex flex-wrap gap-2"><select value={provider} onChange={(event) => setProvider(event.target.value)} className="rounded-xl border border-white/15 bg-white/10 px-3 py-2.5 text-sm text-white"><option className="text-slate-900" value="">Select provider</option>{providers.map((item) => <option className="text-slate-900" key={item.id} value={item.id}>{item.label}</option>)}</select><form onSubmit={(event) => void searchExternal(event)} className="flex min-w-[280px] flex-1 gap-2"><div className="flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-white/15 bg-white/10 px-3"><Search size={16} className="shrink-0 text-slate-300" /><input value={externalQuery} onChange={(event) => setExternalQuery(event.target.value)} placeholder="Search provider products..." className="min-w-0 flex-1 bg-transparent py-2.5 text-sm text-white outline-none placeholder:text-slate-400" /></div><button type="submit" disabled={externalLoading || !provider} className="rounded-xl bg-sky-500 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{externalLoading ? 'Searching...' : 'Search'}</button></form></div>
 					</div>
 					{externalProducts.length ? <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{externalProducts.map((product) => { const selected = externalSelected.includes(product.externalProductId); return <button type="button" key={product.externalProductId} onClick={() => setExternalSelected((current) => selected ? current.filter((id) => id !== product.externalProductId) : [...current, product.externalProductId])} className={`rounded-2xl border p-3 text-left transition ${selected ? 'border-sky-300 bg-sky-400/15' : 'border-white/10 bg-white/5 hover:bg-white/10'}`}><div className="flex items-start justify-between gap-3"><span className="line-clamp-2 text-sm font-semibold">{product.name}</span>{selected ? <CheckCircle2 size={18} className="shrink-0 text-sky-300" /> : null}</div>{product.images?.[0] ? <img src={product.images[0]} alt={product.name} className="mt-3 aspect-[4/3] w-full rounded-xl object-cover" /> : null}<p className="mt-2 text-xs text-slate-300">{product.brand || 'Unbranded'} · {product.category || 'Uncategorized'}</p><p className="mt-2 font-semibold">${Number(product.basePrice || 0).toFixed(2)} <span className="text-xs font-normal text-slate-400">· stock {product.stock}</span></p><p className="mt-2 line-clamp-2 text-xs text-slate-400">{product.description || 'No description available.'}</p><p className="mt-2 text-[11px] text-slate-400">{product.attributes?.length || 0} attributes · {product.variants?.length || 0} variants</p></button> })}</div> : null}
-					<div className="mt-4 flex flex-wrap items-center justify-between gap-3"><span className="text-xs text-slate-400">{externalSelected.length} selected · batches are limited to 50 products</span><button type="button" onClick={() => setConfirmImport(true)} disabled={!externalSelected.length || importing} className="inline-flex items-center gap-2 rounded-xl bg-amber-400 px-4 py-2.5 text-sm font-bold text-slate-950 disabled:opacity-50"><Download size={16} />{importing ? 'Importing...' : 'Import selected'}</button></div>
+					<div className="mt-4 flex flex-wrap items-center justify-between gap-3"><span className="text-xs text-slate-400">{externalSelected.length} selected · batches are limited to 50 products</span><button type="button" onClick={() => setConfirmImport(true)} disabled={!externalSelected.length || importing} className="inline-flex items-center gap-2 rounded-xl bg-amber-400 px-4 py-2.5 text-sm font-bold text-slate-950 disabled:opacity-50"><Download size={16} />{importing ? 'Importing...' : externalSelected.length > 1 ? 'Bulk Import' : 'Import'}</button></div>
 				</section>
 
 				{error ? (
@@ -325,14 +351,17 @@ export function ProductWarehouse() {
 								{products.length} items
 							</span>
 						</div>
-						<div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-							<label className="sm:col-span-2 xl:col-span-1"><span className="sr-only">Search warehouse catalog</span><input value={catalogSearch} onChange={(event) => setCatalogSearch(event.target.value)} placeholder="Search name, SKU, barcode" className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-indigo-500" /></label>
+						<div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+							<label className="sm:col-span-2 xl:col-span-2"><span className="sr-only">Search warehouse catalog</span><input value={catalogSearch} onChange={(event) => setCatalogSearch(event.target.value)} placeholder="Search products..." className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-indigo-500" /></label>
 							<select value={catalogCategory} onChange={(event) => setCatalogCategory(event.target.value)} className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm"><option value="">All categories</option>{categories.map((item) => <option key={item}>{item}</option>)}</select>
 							<select value={catalogBrand} onChange={(event) => setCatalogBrand(event.target.value)} className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm"><option value="">All brands</option>{brands.map((item) => <option key={item}>{item}</option>)}</select>
+							<select value={catalogProvider} onChange={(event) => setCatalogProvider(event.target.value)} className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm"><option value="">All providers</option>{providers.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select>
+							<select value={catalogStock} onChange={(event) => setCatalogStock(event.target.value)} className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm"><option value="">All stock</option><option value="in_stock">In stock</option><option value="out_of_stock">Out of stock</option></select>
 							<select value={catalogStatus} onChange={(event) => setCatalogStatus(event.target.value)} className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm"><option value="">All statuses</option><option value="PUBLISHED">Published</option><option value="INACTIVE">Inactive</option><option value="ARCHIVED">Archived</option></select>
+							<label className="xl:col-span-2"><span className="sr-only">Imported after</span><input type="date" value={catalogImportedAfter} onChange={(event) => setCatalogImportedAfter(event.target.value)} aria-label="Imported after" className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" /></label>
 						</div>
 
-						<div className="overflow-x-auto">
+						{loading ? <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{Array.from({ length: 6 }).map((_, index) => <div key={index} className="animate-pulse rounded-2xl border border-slate-200 p-4"><div className="h-32 rounded-xl bg-slate-100" /><div className="mt-4 h-4 w-3/4 rounded bg-slate-100" /><div className="mt-2 h-3 w-1/2 rounded bg-slate-100" /><div className="mt-4 h-9 rounded-lg bg-slate-100" /></div>)}</div> : <div className="overflow-x-auto">
 							<table className="min-w-full text-left text-sm text-slate-700">
 								<thead className="border-b border-slate-200 bg-slate-50 text-slate-600">
 									<tr>
@@ -343,6 +372,7 @@ export function ProductWarehouse() {
 										<th className="px-4 py-3 font-semibold">Price</th>
 										<th className="px-4 py-3 font-semibold">Stock</th>
 										<th className="px-4 py-3 font-semibold">Status</th>
+										<th className="px-4 py-3 font-semibold">Imported</th>
 										<th className="px-4 py-3 font-semibold">Actions</th>
 									</tr>
 								</thead>
@@ -350,7 +380,7 @@ export function ProductWarehouse() {
 									{products.length ? (
 										products.map((product) => (
 													<tr key={product.id} className="border-b border-slate-100 align-top transition hover:bg-slate-50/70">
-												<td className="px-4 py-3 font-medium text-slate-900">{product.name}</td>
+												<td className="px-4 py-3 font-medium text-slate-900"><div className="flex min-w-[210px] items-center gap-3"><span className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-slate-100 text-slate-400">{product.images?.[0] ? <img src={product.images[0]} alt="" className="h-full w-full object-cover" loading="lazy" /> : <ImageOff size={16} />}</span><span className="line-clamp-2">{product.name}</span></div></td>
 												<td className="px-4 py-3 text-slate-500">{product.sku}</td>
 													<td className="px-4 py-3 text-xs text-slate-500"><div className="font-semibold text-slate-700">{product.sourceId || 'manual'}</div><div>{product.externalProductId || '—'}</div></td>
 													<td className="px-4 py-3 text-xs text-slate-500"><div>{product.category || 'Uncategorized'}</div><div>{product.brand || 'Unbranded'}</div></td>
@@ -367,17 +397,20 @@ export function ProductWarehouse() {
 														{product.status}
 													</span>
 												</td>
+													<td className="px-4 py-3 text-xs text-slate-500">{product.importedAt ? new Date(product.importedAt).toLocaleDateString() : '—'}</td>
 												<td className="px-4 py-3">
 													<div className="flex flex-wrap gap-2">
 															<button type="button" onClick={() => setPreviewProduct(product)} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700"><Eye size={14} /> Preview</button>
 															<button type="button" onClick={() => setEditingProduct(product)} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700"><Pencil size={14} /> Edit</button>
-														<button
+																	{product.sourceId && product.externalProductId && product.sourceId !== 'manual' ? <button type="button" onClick={() => void resync(product)} className="inline-flex items-center gap-1 rounded-lg border border-sky-200 bg-sky-50 px-2.5 py-1.5 text-xs font-medium text-sky-700"><RefreshCw size={14} /> Re-sync</button> : null}
+																	<button
 															type="button"
 															onClick={() => void toggle(product)}
 															className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700"
 														>
 															{product.status === 'PUBLISHED' ? 'Deactivate' : 'Activate'}
 														</button>
+																{product.status !== 'ARCHIVED' ? <button type="button" onClick={() => void archive(product)} className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-700">Archive</button> : null}
 														<button
 															type="button"
 																	onClick={() => setPendingDelete(product)}
@@ -385,6 +418,9 @@ export function ProductWarehouse() {
 														>
 																	<Trash2 size={14} /> Delete
 														</button>
+													</div>}
+													<div className="grid gap-3 md:hidden">
+														{products.map((product) => <article key={product.id} className="rounded-2xl border border-slate-200 p-4 shadow-sm"><div className="flex gap-3"><span className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-100 text-slate-400">{product.images?.[0] ? <img src={product.images[0]} alt="" className="h-full w-full object-cover" loading="lazy" /> : <ImageOff size={18} />}</span><div className="min-w-0"><h3 className="line-clamp-2 font-semibold text-slate-900">{product.name}</h3><p className="mt-1 text-xs text-slate-500">{product.sku} · {product.sourceId || 'manual'}</p><span className={`mt-2 inline-flex rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-wider ${product.status === 'PUBLISHED' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>{product.status}</span></div></div><dl className="mt-4 grid grid-cols-2 gap-3 text-xs"><div><dt className="text-slate-500">Price</dt><dd className="font-semibold text-slate-800">${Number(product.basePrice ?? 0).toFixed(2)}</dd></div><div><dt className="text-slate-500">Stock</dt><dd className="font-semibold text-slate-800">{product.stock}</dd></div><div><dt className="text-slate-500">Category</dt><dd className="truncate font-semibold text-slate-800">{product.category || '—'}</dd></div><div><dt className="text-slate-500">Imported</dt><dd className="font-semibold text-slate-800">{product.importedAt ? new Date(product.importedAt).toLocaleDateString() : '—'}</dd></div></dl><div className="mt-4 flex flex-wrap gap-2"><button type="button" onClick={() => setPreviewProduct(product)} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700"><Eye size={14} /> Preview</button><button type="button" onClick={() => setEditingProduct(product)} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700"><Pencil size={14} /> Edit</button>{product.sourceId && product.externalProductId && product.sourceId !== 'manual' ? <button type="button" onClick={() => void resync(product)} className="inline-flex items-center gap-1 rounded-lg border border-sky-200 bg-sky-50 px-2.5 py-1.5 text-xs font-semibold text-sky-700"><RefreshCw size={14} /> Re-sync</button> : null}<button type="button" onClick={() => void toggle(product)} className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700">{product.status === 'PUBLISHED' ? 'Deactivate' : 'Activate'}</button></div></article>)}
 													</div>
 												</td>
 											</tr>

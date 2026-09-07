@@ -7,6 +7,7 @@ import {
   RefreshCw,
   Search,
   ShoppingBag,
+  SlidersHorizontal,
   Trash2,
   X,
 } from "lucide-react";
@@ -103,6 +104,7 @@ export function ProductStorehousePage() {
   const [viewProduct, setViewProduct] = useState<WarehouseProduct | null>(null);
   const [pendingRemove, setPendingRemove] = useState<WarehouseProduct | null>(null);
   const [confirmAddAll, setConfirmAddAll] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   const load = async (signal?: AbortSignal) => {
     setLoading(true);
@@ -302,7 +304,19 @@ export function ProductStorehousePage() {
             {error}
           </div>
         ) : null}
-        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex items-center justify-between gap-3 md:hidden">
+          <p className="text-sm font-semibold text-slate-700">{totalResults} products available</p>
+          <button
+            type="button"
+            aria-expanded={filtersOpen}
+            aria-controls="storehouse-filters"
+            onClick={() => setFiltersOpen((current) => !current)}
+            className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm"
+          >
+            <SlidersHorizontal size={16} /> Filters
+          </button>
+        </div>
+        <section id="storehouse-filters" className={`rounded-2xl border border-slate-200 bg-white p-4 shadow-sm ${filtersOpen ? "block" : "hidden md:block"}`}>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(260px,1.5fr)_repeat(4,minmax(140px,1fr))]">
             <label className="relative block">
               <Search

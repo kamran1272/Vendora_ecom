@@ -93,7 +93,7 @@ export class ProductWarehouseService {
     return this.prisma.warehouseImport.findMany({ orderBy: { createdAt: 'desc' }, take: Math.min(50, Math.max(1, Number(limit) || 20)) });
   }
 
-  async listWarehouse(query: { page?: number; limit?: number; search?: string; category?: string; brand?: string; minPrice?: number; maxPrice?: number; stockStatus?: string; status?: string; sort?: string; includeInactive?: boolean }, userId?: string) {
+  async listWarehouse(query: { page?: number; limit?: number; search?: string; category?: string; brand?: string; provider?: string; importedAfter?: string; minPrice?: number; maxPrice?: number; stockStatus?: string; status?: string; sort?: string; includeInactive?: boolean }, userId?: string) {
     const page = this.normalizePage(query.page);
     const limit = this.normalizeLimit(query.limit);
     const search = query.search?.trim();
@@ -122,6 +122,11 @@ export class ProductWarehouseService {
     }
     if (query.category) where.category = query.category;
     if (query.brand) where.brand = query.brand;
+    if (query.provider) where.sourceId = query.provider;
+    if (query.importedAfter) {
+      const importedAfter = new Date(query.importedAfter);
+      if (!Number.isNaN(importedAfter.getTime())) where.importedAt = { gte: importedAfter };
+    }
     const minPrice = Number(query.minPrice);
     const maxPrice = Number(query.maxPrice);
     if (Number.isFinite(minPrice) || Number.isFinite(maxPrice)) {
