@@ -173,17 +173,22 @@ export function SearchPage() {
     .slice(0, 4)
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-7">
       <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Shop' }, ...(keyword ? [{ label: `Search: ${keyword}` }] : [])]} />
-      <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
-        <p className="text-sm font-semibold uppercase tracking-[0.2em] text-brand-600">Search</p>
-        <h2 className="mt-2 text-3xl font-black text-slate-900">{keyword ? `Results for "${keyword}"` : 'Search products'}</h2>
-        <p className="mt-2 text-slate-600">{filteredProducts.length} products found across categories, brands, and seller stores.</p>
+      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.2em] text-brand-600">Vendora marketplace</p>
+            <h2 className="mt-2 text-3xl font-black tracking-tight text-slate-900">{keyword ? `Results for "${keyword}"` : 'Shop all products'}</h2>
+            <p className="mt-2 text-sm text-slate-600">{filteredProducts.length} products from verified seller stores.</p>
+          </div>
+          <span className="w-fit rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold uppercase tracking-[0.14em] text-slate-600">{filteredProducts.length} results</span>
+        </div>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
         <div className="space-y-4 lg:sticky lg:top-24 lg:self-start">
-          <div className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <label htmlFor="category-filter" className="mb-2 block text-sm font-semibold text-slate-700">Category</label>
             <select id="category-filter" value={category} onChange={(event) => updateParam('category', event.target.value)} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:border-brand-500">
               {categories.map((item) => <option key={item} value={item}>{item === 'all' ? 'All categories' : item}</option>)}
@@ -211,7 +216,7 @@ export function SearchPage() {
         </div>
 
         <section className="space-y-5">
-          <div className="rounded-3xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div className="flex flex-wrap items-center gap-2">
                 <label className="flex items-center gap-2 text-sm font-medium text-slate-600">Sort by
@@ -223,7 +228,7 @@ export function SearchPage() {
             </div>
           </div>
 
-          <div className="grid gap-4 sm:gap-5 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5">
+          <div className="grid grid-cols-1 items-stretch gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3 2xl:grid-cols-4">
             {isLoading && <LoadingState className="col-span-2 md:col-span-3 lg:col-span-4 2xl:col-span-5" />}
 
             {!isLoading && loadError && (

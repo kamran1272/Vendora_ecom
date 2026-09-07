@@ -42,11 +42,11 @@ export function ProductCard({ product }: ProductCardProps) {
   const productHref = product.id ? `/products/${product.id}` : product.slug ? `/products/${product.slug}` : '/products'
 
   return (
-    <article className="group overflow-hidden rounded-[1.7rem] border border-slate-200 bg-white shadow-sm transition duration-200 hover:-translate-y-1 hover:shadow-xl" onMouseEnter={() => setIsHovered(true)} onMouseLeave={() => setIsHovered(false)}>
+    <article className="group flex h-full min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition duration-200 hover:-translate-y-1 hover:border-indigo-200 hover:shadow-xl" onMouseEnter={() => setIsHovered(true)} onMouseLeave={() => setIsHovered(false)}>
       <div className="relative">
         <Link to={productHref} className="block">
           <div
-            className="relative h-52 bg-gradient-to-br from-slate-200 via-slate-100 to-slate-50"
+            className="relative aspect-[4/3] bg-gradient-to-br from-slate-200 via-slate-100 to-slate-50"
           >
             {product.imageUrl && !imageFailed ? (
               <>
@@ -80,26 +80,26 @@ export function ProductCard({ product }: ProductCardProps) {
         </Link>
       </div>
 
-      <div className="space-y-4 p-5">
-        <div className="flex items-center justify-between gap-2">
-          <span className="rounded-full bg-orange-50 px-2.5 py-1 text-[0.62rem] font-semibold uppercase tracking-[0.12em] text-[#d97706]">
+      <div className="flex flex-1 flex-col gap-3 p-4 sm:p-5">
+        <div className="flex min-h-7 items-start justify-between gap-2">
+          <span className="max-w-[62%] truncate rounded-full bg-orange-50 px-2.5 py-1 text-[0.62rem] font-semibold uppercase tracking-[0.12em] text-[#d97706]">
             {product.category || 'Category unavailable'}
           </span>
-          <StockBadge inStock={product.inStock} label={product.stockStatus} />
+          <span className="shrink-0"><StockBadge inStock={product.inStock} label={product.stockStatus} /></span>
         </div>
 
-        <div>
-          <p className="text-sm text-slate-500">{sellerName}</p>
-          <Link to={productHref} className="mt-2 block text-xl font-bold leading-snug text-slate-900 hover:text-[#1f2d4d]">
+        <div className="min-w-0">
+          <p className="truncate text-sm text-slate-500">{sellerName}</p>
+          <Link to={productHref} className="mt-1 block min-h-[3.25rem] line-clamp-2 text-lg font-bold leading-snug text-slate-900 hover:text-[#1f2d4d] sm:text-xl">
             {product.name}
           </Link>
         </div>
 
-        <RatingStars rating={product.rating} reviewCount={reviewCount} />
+        <div className="min-h-6"><RatingStars rating={product.rating} reviewCount={reviewCount} /></div>
 
-        <PriceDisplay price={currentPrice} oldPrice={oldPrice > currentPrice ? oldPrice : undefined} />
+        <div className="min-h-9"><PriceDisplay price={currentPrice} oldPrice={oldPrice > currentPrice ? oldPrice : undefined} /></div>
 
-        <div className="flex items-center justify-between gap-3 pt-2">
+        <div className="mt-auto flex items-center justify-between gap-3 pt-2">
           <AddToCartButton product={{ id: productId, name: product.name, price: currentPrice, shop: sellerName, imageUrl: product.imageUrl, inStock: product.inStock }} className="flex-1" />
         </div>
       </div>
