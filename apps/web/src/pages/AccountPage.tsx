@@ -4,7 +4,7 @@ import { PageShell } from '@/components/common/PageShell'
 import { Card } from '@/components/ui/DesignSystem'
 import { ErrorState, LoadingState } from '@/components/ui/FeedbackState'
 import { apiRequest } from '@/services/api'
-import { useAuth } from '@/store/auth'
+import { useAuth, type AuthUser } from '@/store/auth'
 import { SELLER_REGISTRATION_URL } from '@/config/customer'
 
 const accountLinks = [
