@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { NavLink, useLocation } from 'react-router-dom'
+import { NavLink } from 'react-router-dom'
 import { BarChart3, Boxes, CircleDollarSign, ClipboardList, LayoutDashboard, LifeBuoy, Package, Receipt, Settings, ShieldCheck, ShoppingBag, Store, Tags, Truck, Users, WalletCards, X } from 'lucide-react'
 
 const navigationGroups = [
@@ -45,7 +45,6 @@ const navigationGroups = [
 ]
 
 export function AdminSidebar({ open, collapsed, onClose }: { open: boolean; collapsed: boolean; onClose: () => void }) {
-  const location = useLocation()
   const sidebarRef = useRef<HTMLElement | null>(null)
 
   useEffect(() => {
@@ -63,7 +62,7 @@ export function AdminSidebar({ open, collapsed, onClose }: { open: boolean; coll
 
     node.addEventListener('scroll', handleScroll)
     return () => node.removeEventListener('scroll', handleScroll)
-  }, [location.pathname])
+  }, [])
 
   const saveSidebarScroll = () => {
     const node = sidebarRef.current
@@ -74,7 +73,6 @@ export function AdminSidebar({ open, collapsed, onClose }: { open: boolean; coll
 
   return (
     <aside
-      ref={sidebarRef}
       className={`fixed left-0 top-0 z-50 flex h-screen w-[252px] max-w-[calc(100vw-1.5rem)] shrink-0 -translate-x-full flex-col overflow-hidden border-r border-slate-200/90 bg-white px-4 py-5 text-slate-700 shadow-[8px_0_30px_rgba(15,23,42,0.04)] transition-all duration-300 ease-out lg:translate-x-0 ${collapsed ? 'lg:w-[84px] lg:px-3' : ''} ${open ? 'translate-x-0' : ''}`}
       aria-label="Admin navigation"
     >
