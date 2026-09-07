@@ -92,4 +92,14 @@ export class ChatController {
   updateConversation(@Req() req: any, @Param('conversationId') conversationId: string, @Body() body: any) {
     return this.chatService.updateConversationStatus(conversationId, req.user, body);
   }
+
+  @Delete('conversations/:conversationId/messages')
+  clearConversationMessages(@Req() req: any, @Param('conversationId') conversationId: string) {
+    return this.chatService.clearConversationMessages(conversationId, req.user);
+  }
+
+  @Delete('conversations/:conversationId')
+  deleteConversation(@Req() req: any, @Param('conversationId') conversationId: string) {
+    return this.chatService.deleteConversation(conversationId, req.user);
+  }
 }

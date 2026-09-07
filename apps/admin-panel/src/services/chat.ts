@@ -152,3 +152,11 @@ export async function markAdminConversationSeen(conversationId: string) {
 export async function setAdminConversationTyping(conversationId: string, active: boolean) {
   return apiRequest(`/chat/conversations/${conversationId}/typing`, { method: 'POST', body: JSON.stringify({ active }) })
 }
+
+export async function clearAdminConversationMessages(conversationId: string) {
+  return apiRequest<{ success: boolean; deletedCount: number }>(`/chat/conversations/${conversationId}/messages`, { method: 'DELETE' })
+}
+
+export async function deleteAdminConversation(conversationId: string) {
+  return apiRequest<{ success: boolean; conversationId: string }>(`/chat/conversations/${conversationId}`, { method: 'DELETE' })
+}

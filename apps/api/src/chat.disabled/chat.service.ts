@@ -567,16 +567,12 @@ export class ChatService {
     const isAdmin = [UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.STAFF].includes(user.role as any);
     if (!isAdmin) throw new ForbiddenException('Only administrators can update conversation status or metadata.');
 
-    const status = payload.status as ConversationStatusValue;
-
-    if (!status) {
-      throw new BadRequestException('Conversation status is required.');
-    }
+    const status = payload.status ? payload.status as ConversationStatusValue : undefined;
 
     const conversation = await this.prisma.conversation.update({
       where: { id: conversationId },
       data: {
-        status,
+        ...(status ? { status } : {}),
         ...(payload.priority ? { priority: String(payload.priority).toUpperCase() } : {}),
         ...(payload.category ? { category: String(payload.category).toUpperCase() } : {}),
         ...(payload.adminNotes !== undefined ? { adminNotes: payload.adminNotes || null } : {}),
@@ -585,10 +581,31 @@ export class ChatService {
         ...(payload.aiActive !== undefined ? { aiActive: Boolean(payload.aiActive) } : {}),
         ...(payload.humanTakeover !== undefined ? { humanTakeover: Boolean(payload.humanTakeover) } : {}),
         ...(payload.metadata !== undefined ? { metadata: payload.metadata ? JSON.stringify(payload.metadata) : null } : {}),
-        closedAt: status === ConversationStatus.CLOSED ? new Date() : null,
+        ...(status ? { closedAt: status === ConversationStatus.CLOSED ? new Date() : null } : {}),
       },
     });
 
     return conversation;
+  }
+
+  private assertAdmin(user: ChatUserContext) {
+    if (![UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.STAFF].includes(user.role as any)) {
+      throw new ForbiddenException('Only administrators can manage support conversations.');
+    }
+  }
+
+  async clearConversationMessages(conversationId: string, user: ChatUserContext) {
+    await this.validateConversationAccess(conversationId, user);
+    this.assertAdmin(user);
+    const result = await this.prisma.chatMessage.deleteMany({ where: { conversationId } });
+    await this.prisma.conversation.update({ where: { id: conversationId }, data: { lastMessageAt: null, updatedAt: new Date() } });
+    return { success: true, deletedCount: result.count };
+  }
+
+  async deleteConversation(conversationId: string, user: ChatUserContext) {
+    await this.validateConversationAccess(conversationId, user);
+    this.assertAdmin(user);
+    await this.prisma.conversation.delete({ where: { id: conversationId } });
+    return { success: true, conversationId };
   }
 }

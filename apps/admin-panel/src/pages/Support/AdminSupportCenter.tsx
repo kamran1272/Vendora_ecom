@@ -1,8 +1,10 @@
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, Paperclip, Send } from 'lucide-react'
+import { ArrowLeft, Bot, Eraser, MoreVertical, Paperclip, Send, Trash2, X } from 'lucide-react'
 import { io } from 'socket.io-client'
 import {
   closeAdminConversation,
+  clearAdminConversationMessages,
+  deleteAdminConversation,
   fetchAdminChatConversations,
   fetchAdminChatAttachment,
   fetchAdminChatMessages,
@@ -85,6 +87,8 @@ export function AdminSupportCenterPage() {
   const [inboxSearch, setInboxSearch] = useState('')
   const [inboxFilter, setInboxFilter] = useState('ALL')
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'offline'>('connecting')
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null)
+  const [pendingAction, setPendingAction] = useState<{ type: 'clear' | 'delete'; conversation: ChatConversation } | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
   const selectedConversation = useMemo(
@@ -244,6 +248,24 @@ export function AdminSupportCenterPage() {
     setConversations(await fetchAdminChatConversations())
   }
 
+  const runConversationAction = async () => {
+    if (!pendingAction) return
+    const { type, conversation } = pendingAction
+    try {
+      if (type === 'clear') {
+        await clearAdminConversationMessages(conversation.id)
+        if (selectedId === conversation.id) setMessages([])
+      } else {
+        await deleteAdminConversation(conversation.id)
+        if (selectedId === conversation.id) setSelectedId(null)
+      }
+      setConversations(await fetchAdminChatConversations())
+      setPendingAction(null)
+    } catch (actionError) {
+      setError(actionError instanceof Error ? actionError.message : 'Unable to update this conversation.')
+    }
+  }
+
   return (
     <AdminLayout>
     <div className="support-page space-y-6 p-1 text-slate-800 sm:p-2 lg:p-3">
@@ -291,17 +313,18 @@ export function AdminSupportCenterPage() {
             ) : (
               <div className="space-y-3">
                 {visibleConversations.map((conversation) => (
-                  <button
+                  <div
                     key={conversation.id}
-                    type="button"
                     onClick={() => setSelectedId(conversation.id)}
                     className={`w-full rounded-2xl border p-3 text-left transition ${selectedId === conversation.id ? 'border-[#1f2d4d] bg-white shadow-sm' : 'border-slate-200 bg-white hover:border-slate-300'}`}
                   >
                     <div className="flex items-center justify-between gap-3">
-                      <p className="truncate font-semibold text-slate-900">{getConversationName(conversation)}</p>
-                      {conversation.unreadCount ? (
-                        <span className="rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-bold text-white">{conversation.unreadCount}</span>
-                      ) : null}
+                      <button type="button" onClick={() => setSelectedId(conversation.id)} className="min-w-0 flex-1 text-left"><p className="truncate font-semibold text-slate-900">{getConversationName(conversation)}</p></button>
+                      <div className="relative flex shrink-0 items-center gap-2">
+                        {conversation.unreadCount ? <span className="rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-bold text-white">{conversation.unreadCount}</span> : null}
+                        <button type="button" aria-label={`Conversation options for ${getConversationName(conversation)}`} aria-expanded={openMenuId === conversation.id} onClick={(event) => { event.stopPropagation(); setOpenMenuId((current) => current === conversation.id ? null : conversation.id) }} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"><MoreVertical size={17} /></button>
+                        {openMenuId === conversation.id ? <div role="menu" className="absolute right-0 top-9 z-20 w-44 rounded-xl border border-slate-200 bg-white p-1.5 text-sm shadow-xl"><button type="button" role="menuitem" onClick={() => { setPendingAction({ type: 'clear', conversation }); setOpenMenuId(null) }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-slate-700 hover:bg-slate-50"><Eraser size={15} /> Clear chat</button><button type="button" role="menuitem" onClick={() => { setPendingAction({ type: 'delete', conversation }); setOpenMenuId(null) }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-rose-700 hover:bg-rose-50"><Trash2 size={15} /> Delete conversation</button></div> : null}
+                      </div>
                     </div>
                     <p className="mt-1 text-sm text-slate-600">{getConversationRole(conversation)} · {getConversationContact(conversation)}</p>
                     <p className="mt-1 truncate text-xs text-slate-500">{conversation.messages?.[0]?.content || 'No messages yet'}</p>
@@ -310,7 +333,7 @@ export function AdminSupportCenterPage() {
                       <span className={conversation.online ? 'text-emerald-600' : 'text-slate-400'}>{conversation.online ? 'Online' : 'Offline'}</span>
                       <span>{conversation.lastMessageAt ? new Date(conversation.lastMessageAt).toLocaleString() : 'Just now'}</span>
                     </div>
-                  </button>
+                  </div>
                 ))}
               </div>
             )}
@@ -330,13 +353,15 @@ export function AdminSupportCenterPage() {
                       <p className="text-sm text-slate-500">{getConversationRole(selectedConversation)} · {getConversationContact(selectedConversation)}</p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2">
                       <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
                         {selectedConversation.status || 'OPEN'}
                       </span>
                       <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-amber-700">
                         {selectedConversation.priority || 'NORMAL'}
                       </span>
+                        <button type="button" aria-label="Conversation options" onClick={() => setOpenMenuId((current) => current === selectedConversation.id ? null : selectedConversation.id)} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100" title="Conversation options"><MoreVertical size={18} /></button>
+                        {openMenuId === selectedConversation.id ? <div className="relative"><div role="menu" className="absolute right-0 top-10 z-20 w-44 rounded-xl border border-slate-200 bg-white p-1.5 text-sm shadow-xl"><button type="button" role="menuitem" onClick={() => { setPendingAction({ type: 'clear', conversation: selectedConversation }); setOpenMenuId(null) }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-slate-700 hover:bg-slate-50"><Eraser size={15} /> Clear chat</button><button type="button" role="menuitem" onClick={() => { setPendingAction({ type: 'delete', conversation: selectedConversation }); setOpenMenuId(null) }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-rose-700 hover:bg-rose-50"><Trash2 size={15} /> Delete conversation</button></div></div> : null}
                     </div>
                   </div>
                 </div>
@@ -406,12 +431,13 @@ export function AdminSupportCenterPage() {
                 {selectedConversation.shop ? <div className="rounded-xl bg-slate-50 p-3"><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Shop</p><p className="mt-1 font-medium text-slate-900">{selectedConversation.shop.name}</p></div> : null}
                 {selectedConversation.order ? <div className="rounded-xl bg-slate-50 p-3"><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Order context</p><p className="mt-1 font-medium text-slate-900">#{selectedConversation.order.id}</p><p className="mt-1 text-xs text-slate-500">{selectedConversation.order.status} · ${Number(selectedConversation.order.total ?? 0).toFixed(2)}</p></div> : null}
                 {selectedConversation.product ? <div className="rounded-xl bg-slate-50 p-3"><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Product context</p><p className="mt-1 font-medium text-slate-900">{selectedConversation.product.name}</p><p className="mt-1 text-xs text-slate-500">ID {selectedConversation.product.id}</p></div> : null}
-                <div className="rounded-xl bg-slate-50 p-3"><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Assignment</p><p className="mt-1 font-medium text-slate-900">{selectedConversation.assignedAdminId === adminUser?.id ? `${adminUser?.name || 'Admin'} (you)` : selectedConversation.assignedAdminId || 'Unassigned'}</p><button type="button" disabled={!adminUser?.id} onClick={() => void updateTicket({ assignedAdminId: adminUser?.id })} className="mt-3 rounded-lg bg-slate-950 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">Assign to me</button><p className="mt-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Priority</p><p className="mt-1 font-medium text-slate-900">{selectedConversation.priority || 'NORMAL'}</p></div>
+                <div className="rounded-xl bg-slate-50 p-3"><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Assignment</p><p className="mt-1 font-medium text-slate-900">{selectedConversation.assignedAdminId === adminUser?.id ? `${adminUser?.name || 'Admin'} (you)` : selectedConversation.assignedAdminId || 'Unassigned'}</p><button type="button" disabled={!adminUser?.id} onClick={() => void updateTicket({ assignedAdminId: adminUser?.id })} className="mt-3 rounded-lg bg-slate-950 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">Assign to me</button><p className="mt-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Priority</p><p className="mt-1 font-medium text-slate-900">{selectedConversation.priority || 'NORMAL'}</p><button type="button" onClick={() => void updateTicket({ aiEnabled: !selectedConversation.aiEnabled, aiActive: !selectedConversation.aiEnabled, humanTakeover: false })} className="mt-4 inline-flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-700"><Bot size={15} /> {selectedConversation.aiEnabled ? 'Disable AI assistant' : 'Enable AI assistant'}</button></div>
               </div>
             </aside>
           ) : null}
         </div>
       </div>
+      {pendingAction ? <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/45 p-4" role="presentation"><div role="dialog" aria-modal="true" aria-labelledby="conversation-action-title" className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl"><div className="flex items-start justify-between gap-4"><div><h2 id="conversation-action-title" className="text-lg font-bold text-slate-900">{pendingAction.type === 'clear' ? 'Clear chat history?' : 'Delete conversation?'}</h2><p className="mt-2 text-sm leading-6 text-slate-600">{pendingAction.type === 'clear' ? 'All messages will be permanently removed, while the seller or customer conversation remains available.' : 'This permanently removes the conversation, messages, and participants. This cannot be undone.'}</p><p className="mt-3 truncate text-sm font-semibold text-slate-900">{getConversationName(pendingAction.conversation)}</p></div><button type="button" aria-label="Close confirmation" onClick={() => setPendingAction(null)} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"><X size={18} /></button></div><div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><button type="button" onClick={() => setPendingAction(null)} className="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700">Cancel</button><button type="button" onClick={() => void runConversationAction()} className={`rounded-lg px-4 py-2.5 text-sm font-semibold text-white ${pendingAction.type === 'delete' ? 'bg-rose-600 hover:bg-rose-700' : 'bg-slate-900 hover:bg-slate-800'}`}>{pendingAction.type === 'clear' ? 'Clear chat' : 'Delete conversation'}</button></div></div></div> : null}
     </div>
     </AdminLayout>
   )
