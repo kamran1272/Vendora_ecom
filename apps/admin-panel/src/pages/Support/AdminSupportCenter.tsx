@@ -1,5 +1,5 @@
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, Bot, Eraser, MoreVertical, Paperclip, Send, Trash2, X } from 'lucide-react'
+import { ArrowLeft, Bot, ChevronDown, Eraser, MoreVertical, Paperclip, Send, Trash2, X } from 'lucide-react'
 import { io } from 'socket.io-client'
 import {
   closeAdminConversation,
@@ -301,10 +301,15 @@ export function AdminSupportCenterPage() {
               <h2 className="text-lg font-bold text-slate-900">Queue</h2>
               <span className="rounded-full bg-slate-200 px-2 py-1 text-xs font-bold text-slate-700">{conversations.length}</span>
             </div>
-            <input value={inboxSearch} onChange={(event) => setInboxSearch(event.target.value)} placeholder="Search seller, shop, subject, message" className="mb-3 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" />
-            <div className="mb-4 flex flex-wrap gap-1.5">
-              {['ALL', 'UNREAD', 'OPEN', 'PENDING', 'CLOSED', 'HIGH'].map((filter) => <button key={filter} type="button" onClick={() => setInboxFilter(filter)} className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${inboxFilter === filter ? 'bg-[#1f2d4d] text-white' : 'bg-white text-slate-500 ring-1 ring-slate-200'}`}>{filter}</button>)}
-            </div>
+            <details open className="group mb-4">
+              <summary className="flex cursor-pointer list-none items-center justify-between rounded-xl px-1 py-1 text-xs font-bold uppercase tracking-[0.14em] text-slate-500 [&::-webkit-details-marker]:hidden">Filters <ChevronDown size={15} className="transition-transform group-open:rotate-180" /></summary>
+              <div className="pt-2">
+                <input value={inboxSearch} onChange={(event) => setInboxSearch(event.target.value)} placeholder="Search seller, shop, subject, message" className="mb-3 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" />
+                <div className="flex flex-wrap gap-1.5">
+                  {['ALL', 'UNREAD', 'OPEN', 'PENDING', 'CLOSED', 'HIGH'].map((filter) => <button key={filter} type="button" onClick={() => setInboxFilter(filter)} className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${inboxFilter === filter ? 'bg-[#1f2d4d] text-white' : 'bg-white text-slate-500 ring-1 ring-slate-200'}`}>{filter}</button>)}
+                </div>
+              </div>
+            </details>
 
             {loading ? (
               <div className="rounded-xl bg-white p-4 text-sm text-slate-500">Loading support queue...</div>
@@ -389,13 +394,19 @@ export function AdminSupportCenterPage() {
                 </div>
 
                 <div className="support-composer border-t border-slate-200 p-4">
-                  <div className="support-ticket-fields mb-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                  <details open className="group mb-3">
+                    <summary className="flex cursor-pointer list-none items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold uppercase tracking-[0.14em] text-slate-500 [&::-webkit-details-marker]:hidden">Conversation options <ChevronDown size={15} className="transition-transform group-open:rotate-180" /></summary>
+                    <div className="support-ticket-fields mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                     <label className="support-field"><span>Find in conversation</span><input aria-label="Find in conversation" value={messageSearch} onChange={(event) => setMessageSearch(event.target.value)} placeholder="Search messages" className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm" /></label>
                     <label className="support-field"><span>Topic</span><select aria-label="Conversation topic" value={selectedConversation.category || 'OTHER'} onChange={(event) => void updateTicket({ category: event.target.value })} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm">{ticketCategories.map((category) => <option key={category} value={category}>{category}</option>)}</select></label>
                     <label className="support-field"><span>Priority</span><select aria-label="Conversation priority" value={selectedConversation.priority || 'NORMAL'} onChange={(event) => void updateTicket({ priority: event.target.value })} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm">{priorities.map((priority) => <option key={priority} value={priority}>{priority}</option>)}</select></label>
                     <label className="support-field"><span>Status</span><select aria-label="Conversation status" value={selectedConversation.status || 'OPEN'} onChange={(event) => void updateTicket({ status: event.target.value })} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm">{ticketStatuses.map((status) => <option key={status} value={status}>{status}</option>)}</select></label>
-                  </div>
-                  <label className="support-field mb-3"><span>Internal note <em>Only visible to admins</em></span><textarea aria-label="Internal admin note" value={adminNotes} onChange={(event) => setAdminNotes(event.target.value)} onBlur={() => void updateTicket({ adminNotes })} rows={2} placeholder="Add context for the support team..." className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm" /></label>
+                    </div>
+                  </details>
+                  <details className="group mb-3">
+                    <summary className="flex cursor-pointer list-none items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold uppercase tracking-[0.14em] text-slate-500 [&::-webkit-details-marker]:hidden">Internal note <ChevronDown size={15} className="transition-transform group-open:rotate-180" /></summary>
+                    <label className="support-field mt-3"><span>Only visible to admins</span><textarea aria-label="Internal admin note" value={adminNotes} onChange={(event) => setAdminNotes(event.target.value)} onBlur={() => void updateTicket({ adminNotes })} rows={2} placeholder="Add context for the support team..." className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm" /></label>
+                  </details>
                   <div className="mb-3 flex flex-wrap items-center gap-2"><button type="button" onClick={() => void toggleConversationState()} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium">{selectedConversation.status === 'CLOSED' ? 'Reopen' : 'Close conversation'}</button><span className="text-xs text-slate-500">{selectedConversation.typing ? 'Someone is typing...' : typing ? 'Typing...' : 'Live updates every 5 seconds'}</span></div>
                   {error ? <div className="mb-3 rounded-xl border border-red-200 bg-red-50 p-2 text-sm text-red-700">{error}</div> : null}
                   <div className="mb-3 flex items-center gap-2"><input ref={fileRef} type="file" className="hidden" onChange={readAttachment} /><button type="button" onClick={() => fileRef.current?.click()} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"><Paperclip size={16} /> Attach file</button>{attachmentName ? <span className="truncate text-xs text-slate-500">{attachmentName}</span> : <span className="text-xs text-slate-400">No attachment selected</span>}</div>
@@ -426,13 +437,16 @@ export function AdminSupportCenterPage() {
           {selectedConversation ? (
             <aside className="support-context hidden min-h-0 overflow-y-auto border-l border-slate-200 bg-white p-4 lg:block">
               <div className="mb-4 flex items-center gap-2"><span className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-50 text-sm font-bold text-indigo-700">{getConversationName(selectedConversation).slice(0, 1).toUpperCase()}</span><div className="min-w-0"><h2 className="truncate text-sm font-bold text-slate-900">{getConversationName(selectedConversation)}</h2><p className="text-xs text-slate-500">{getConversationRole(selectedConversation)}</p></div></div>
-              <div className="space-y-3 text-sm">
+              <details open className="group space-y-3 text-sm">
+                <summary className="mb-3 flex cursor-pointer list-none items-center justify-between rounded-xl bg-slate-50 p-3 text-xs font-bold uppercase tracking-[0.14em] text-slate-500 [&::-webkit-details-marker]:hidden">Conversation details <ChevronDown size={15} className="transition-transform group-open:rotate-180" /></summary>
+                <div className="space-y-3 text-sm">
                 <div className="rounded-xl bg-slate-50 p-3"><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Contact</p><p className="mt-1 break-words font-medium text-slate-900">{getConversationContact(selectedConversation)}</p></div>
                 {selectedConversation.shop ? <div className="rounded-xl bg-slate-50 p-3"><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Shop</p><p className="mt-1 font-medium text-slate-900">{selectedConversation.shop.name}</p></div> : null}
                 {selectedConversation.order ? <div className="rounded-xl bg-slate-50 p-3"><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Order context</p><p className="mt-1 font-medium text-slate-900">#{selectedConversation.order.id}</p><p className="mt-1 text-xs text-slate-500">{selectedConversation.order.status} · ${Number(selectedConversation.order.total ?? 0).toFixed(2)}</p></div> : null}
                 {selectedConversation.product ? <div className="rounded-xl bg-slate-50 p-3"><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Product context</p><p className="mt-1 font-medium text-slate-900">{selectedConversation.product.name}</p><p className="mt-1 text-xs text-slate-500">ID {selectedConversation.product.id}</p></div> : null}
                 <div className="rounded-xl bg-slate-50 p-3"><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Assignment</p><p className="mt-1 font-medium text-slate-900">{selectedConversation.assignedAdminId === adminUser?.id ? `${adminUser?.name || 'Admin'} (you)` : selectedConversation.assignedAdminId || 'Unassigned'}</p><button type="button" disabled={!adminUser?.id} onClick={() => void updateTicket({ assignedAdminId: adminUser?.id })} className="mt-3 rounded-lg bg-slate-950 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">Assign to me</button><p className="mt-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Priority</p><p className="mt-1 font-medium text-slate-900">{selectedConversation.priority || 'NORMAL'}</p><button type="button" onClick={() => void updateTicket({ aiEnabled: !selectedConversation.aiEnabled, aiActive: !selectedConversation.aiEnabled, humanTakeover: false })} className="mt-4 inline-flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-700"><Bot size={15} /> {selectedConversation.aiEnabled ? 'Disable AI assistant' : 'Enable AI assistant'}</button></div>
-              </div>
+                </div>
+              </details>
             </aside>
           ) : null}
         </div>
