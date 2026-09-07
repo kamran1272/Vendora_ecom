@@ -1,58 +1,31 @@
 import { Injectable } from '@nestjs/common';
+import { PrismaService } from '@/database/prisma.service';
 
 @Injectable()
 export class ShopsService {
-  private shops = [
-    {
-      id: 1,
-      sellerId: 1,
-      name: 'Aurora Studio',
-      description: 'Premium electronics and gadgets',
-      logo: 'https://via.placeholder.com/100',
-      banner: 'https://via.placeholder.com/1200x400',
-      verified: true,
-    },
-    {
-      id: 2,
-      sellerId: 2,
-      name: 'Luna Labs',
-      description: 'Innovative tech products',
-      logo: 'https://via.placeholder.com/100',
-      banner: 'https://via.placeholder.com/1200x400',
-      verified: true,
-    },
-  ];
+  constructor(private readonly prisma: PrismaService) {}
 
   findAll() {
-    return this.shops;
+    return this.prisma.shop.findMany({ orderBy: { name: 'asc' } });
   }
 
-  findOne(id: number) {
-    return this.shops.find((s) => s.id === id);
+  findOne(id: string) {
+    return this.prisma.shop.findUnique({ where: { id } });
   }
 
-  findBySellerId(sellerId: number) {
-    return this.shops.find((s) => s.sellerId === sellerId);
+  findBySellerId(sellerId: string) {
+    return this.prisma.shop.findUnique({ where: { sellerId } });
   }
 
   create(shopData: any) {
-    const newShop = { id: this.shops.length + 1, ...shopData };
-    this.shops.push(newShop);
-    return newShop;
+    return this.prisma.shop.create({ data: shopData });
   }
 
-  update(id: number, shopData: any) {
-    const shop = this.findOne(id);
-    if (shop) {
-      Object.assign(shop, shopData);
-    }
-    return shop;
+  update(id: string, shopData: any) {
+    return this.prisma.shop.update({ where: { id }, data: shopData });
   }
 
-  remove(id: number) {
-    const index = this.shops.findIndex((s) => s.id === id);
-    if (index > -1) {
-      return this.shops.splice(index, 1);
-    }
+  remove(id: string) {
+    return this.prisma.shop.delete({ where: { id } });
   }
 }

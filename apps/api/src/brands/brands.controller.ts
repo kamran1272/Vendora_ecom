@@ -12,6 +12,6 @@ export class BrandsController {
 
   @Get(':id')
   findOne(@Param('id') id: string) {
-    return this.brandsService.findOne(Number(id));
+    return this.brandsService.findOne(id);
   }
 }

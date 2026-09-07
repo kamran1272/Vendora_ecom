@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
+import { DEFAULT_CURRENCY, formatCurrency, getCurrencySymbol } from '@/utils/format'
 
 type FilterSidebarProps = {
   brands: string[]
@@ -173,9 +174,11 @@ function CheckIcon({ className = "" }: { className?: string }) {
 }
 
 function formatPrice(value: number, currency: string) {
-  return `${currency}${new Intl.NumberFormat("en-US", {
+  return formatCurrency(Math.max(0, value), {
+    currency: currency === '$' ? 'USD' : currency,
+    minimumFractionDigits: 0,
     maximumFractionDigits: 0,
-  }).format(Math.max(0, value))}`
+  })
 }
 
 export function FilterSidebar({
@@ -195,13 +198,15 @@ export function FilterSidebar({
   onPriceMaxChange,
   onResetFilters,
   disabled = false,
-  currency = "$",
+  currency = DEFAULT_CURRENCY,
   minPriceLimit = DEFAULT_MIN_PRICE,
   maxPriceLimit = DEFAULT_MAX_PRICE,
   resultCount,
   className = "",
 }: FilterSidebarProps) {
+  const currencySymbol = getCurrencySymbol(currency)
   const [mobileOpen, setMobileOpen] = useState(false)
+  const closeButtonRef = useRef<HTMLButtonElement>(null)
 
   const [openSections, setOpenSections] = useState({
     brand: true,
@@ -213,6 +218,41 @@ export function FilterSidebar({
 
   const [minInput, setMinInput] = useState(String(priceMin || 0))
   const [maxInput, setMaxInput] = useState(String(priceMax || maxPriceLimit))
+
+  useEffect(() => {
+    if (!mobileOpen) return
+
+    const previousFocus = document.activeElement as HTMLElement | null
+    closeButtonRef.current?.focus()
+    const handleDialogKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault()
+        setMobileOpen(false)
+        return
+      }
+
+      if (event.key !== "Tab") return
+      const dialog = closeButtonRef.current?.closest('[role="dialog"]')
+      if (!dialog) return
+      const focusable = [...dialog.querySelectorAll<HTMLElement>('button, input, select, [tabindex]:not([tabindex="-1"])')].filter((element) => !element.hasAttribute("disabled"))
+      if (!focusable.length) return
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+
+    document.addEventListener("keydown", handleDialogKeyDown)
+    return () => {
+      document.removeEventListener("keydown", handleDialogKeyDown)
+      previousFocus?.focus()
+    }
+  }, [mobileOpen])
 
   useEffect(() => {
     setMinInput(String(priceMin || 0))
@@ -479,7 +519,7 @@ export function FilterSidebar({
 
               <div className="relative">
                 <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400">
-                  {currency}
+                  {currencySymbol}
                 </span>
 
                 <input
@@ -509,7 +549,7 @@ export function FilterSidebar({
 
               <div className="relative">
                 <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400">
-                  {currency}
+                  {currencySymbol}
                 </span>
 
                 <input
@@ -934,7 +974,7 @@ export function FilterSidebar({
         >
           <button
             type="button"
-            aria-label="Close filters"
+            aria-label="Dismiss filter drawer"
             onClick={() => setMobileOpen(false)}
             className="absolute inset-0 bg-slate-950/40 backdrop-blur-[2px]"
           />
@@ -961,6 +1001,7 @@ export function FilterSidebar({
 
               <button
                 type="button"
+                ref={closeButtonRef}
                 onClick={() => setMobileOpen(false)}
                 className="flex h-10 w-10 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
                 aria-label="Close filters"

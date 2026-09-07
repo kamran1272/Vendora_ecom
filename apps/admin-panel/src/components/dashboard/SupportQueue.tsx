@@ -1,4 +1,5 @@
 import type { SupportItem } from '../../types'
+import { Link } from 'react-router-dom'
 
 type SupportQueueProps = {
   items: SupportItem[]
@@ -9,7 +10,7 @@ export function SupportQueue({ items }: SupportQueueProps) {
     <div className="rounded-[28px] bg-white p-5 shadow-sm ring-1 ring-slate-200">
       <div className="mb-4 flex items-center justify-between">
         <h3 className="text-xl font-semibold text-slate-900">Support queue</h3>
-        <button className="text-sm font-medium text-sky-600">Open board</button>
+        <Link to="/admin/support" className="text-sm font-medium text-sky-600">Open board</Link>
       </div>
 
       <div className="space-y-3">

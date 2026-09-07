@@ -9,6 +9,8 @@
   color: #1f2d4d;
   background: #f5f5f4;
   --vendora-navy: #1f2d4d;
+  --vendora-primary: #4f46e5;
+  --vendora-primary-deep: #3730a3;
   --vendora-orange: #f59a36;
   --vendora-orange-deep: #ee7c22;
   --vendora-green: #2bb673;
@@ -48,6 +50,17 @@ a {
   min-height: 100vh;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 body,
 button,
 input,
@@ -71,10 +84,8 @@ main {
 }
 
 .bg-brand-600,
-.bg-brand-700,
-.bg-green-500,
-.bg-emerald-500 {
-  background: linear-gradient(135deg, var(--vendora-green) 0%, var(--vendora-green-deep) 100%) !important;
+.bg-brand-700 {
+  background: linear-gradient(135deg, var(--vendora-primary) 0%, var(--vendora-primary-deep) 100%) !important;
 }
 
 .text-brand-700,
@@ -85,7 +96,7 @@ main {
 button,
 .btn,
 a.btn {
-  transition: all 0.2s ease;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
 }
 
 button:hover,
@@ -93,6 +104,48 @@ button:hover,
 a.btn:hover {
   transform: translateY(-1px);
 }
+
+button:active,
+.btn:active,
+a.btn:active {
+  transform: translateY(0);
+}
+
+button:focus-visible,
+.btn:focus-visible,
+a.btn:focus-visible {
+  outline: 2px solid var(--vendora-primary);
+  outline-offset: 2px;
+}
+
+button:disabled,
+.btn:disabled,
+a.btn[aria-disabled='true'] {
+  cursor: not-allowed;
+  transform: none;
+}
+
+@keyframes toast-enter {
+  from { opacity: 0; transform: translateY(-6px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.toast-enter { animation: toast-enter 180ms ease-out both; }
+
+@keyframes heart-pop {
+  0% { transform: scale(0.88); }
+  65% { transform: scale(1.14); }
+  100% { transform: scale(1); }
+}
+
+.heart-pop { animation: heart-pop 180ms ease-out both; }
+
+@keyframes skeleton-shimmer {
+  0% { background-position: 150% 0; }
+  100% { background-position: -50% 0; }
+}
+
+.skeleton-shimmer { background-image: linear-gradient(100deg, transparent 20%, rgb(255 255 255 / 0.6) 45%, transparent 70%); background-size: 200% 100%; animation: skeleton-shimmer 1.6s ease-in-out infinite; }
 
 .card-glow {
   box-shadow: 0 16px 40px rgba(31, 45, 77, 0.08);

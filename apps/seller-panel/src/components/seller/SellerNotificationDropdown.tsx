@@ -1,0 +1,1 @@
+export { NotificationDropdown as SellerNotificationDropdown } from '../notifications/NotificationCenter'

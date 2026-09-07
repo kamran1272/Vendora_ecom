@@ -2,49 +2,57 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { FilterSidebar } from '@/components/catalog/FilterSidebar'
 import { Pagination } from '@/components/catalog/Pagination'
+import { EmptyState, ErrorState, LoadingState } from '@/components/ui/FeedbackState'
 import { ProductCard } from '@/components/ui/ProductCard'
-import { categoryItems, marketplaceSearchCatalog } from '@/data/marketplace'
-import { fetchMarketplaceProducts } from '@/services/marketplace'
-
-const categoryMap = new Map(
-  categoryItems.map((item) => [
-    item.href.replace('/categories/', '').toLowerCase(),
-    { name: item.name, description: item.description }
-  ])
-)
+import { fetchMarketplaceProducts, type MarketplaceProduct } from '@/services/marketplace'
+import { fetchCatalogCategories, type CatalogCategory } from '@/services/catalog'
 
 export function CategoryPage() {
   const { slug } = useParams()
   const [searchParams, setSearchParams] = useSearchParams()
-  const [apiProducts, setApiProducts] = useState<typeof marketplaceSearchCatalog>([])
-  const normalizedSlug = (slug ?? 'electronics').toLowerCase()
-  const categoryInfo = categoryMap.get(normalizedSlug) ?? {
-    name: 'Electronics',
-    description: 'Featured products from trusted seller stores across Vendora.'
+  const [apiProducts, setApiProducts] = useState<MarketplaceProduct[]>([])
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
+  const [reloadKey, setReloadKey] = useState(0)
+  const [catalogCategories, setCatalogCategories] = useState<CatalogCategory[]>([])
+  const normalizedSlug = decodeURIComponent(slug ?? '').trim().toLowerCase()
+  const categoryInfo = catalogCategories.find((item) => item.id === normalizedSlug || item.slug?.toLowerCase() === normalizedSlug || item.name.toLowerCase() === normalizedSlug) ?? {
+    name: normalizedSlug.replace(/[-_]+/g, ' ').replace(/\b\w/g, (character) => character.toUpperCase()) || 'Products',
+    description: 'Products currently listed in this marketplace category.'
   }
 
   useEffect(() => {
+    fetchCatalogCategories().then((items) => setCatalogCategories([...new Map(items.map((item) => [item.id, item])).values()])).catch(() => undefined)
+  }, [])
+
+  useEffect(() => {
     let active = true
+    setLoading(true)
+    setLoadError(false)
 
     fetchMarketplaceProducts({ limit: 200, category: categoryInfo.name })
       .then((response) => {
         if (active) {
-          setApiProducts(response.items as typeof marketplaceSearchCatalog)
+          setApiProducts(response.items)
         }
       })
       .catch(() => {
         if (active) {
           setApiProducts([])
+          setLoadError(true)
         }
+      })
+      .finally(() => {
+        if (active) setLoading(false)
       })
 
     return () => {
       active = false
     }
-  }, [categoryInfo.name])
+  }, [categoryInfo.name, reloadKey])
 
   const allProducts = useMemo(
-    () => (apiProducts.length ? apiProducts : marketplaceSearchCatalog.filter((product) => product.category === categoryInfo.name)),
+    () => apiProducts,
     [apiProducts, categoryInfo.name]
   )
 
@@ -55,7 +63,7 @@ export function CategoryPage() {
   const [selectedRating, setSelectedRating] = useState(() => getParamValue('rating', '0'))
   const [selectedAvailability, setSelectedAvailability] = useState(() => getParamValue('availability', 'all'))
   const [priceMin, setPriceMin] = useState(() => Number(getParamValue('minPrice', '0')) || 0)
-  const [priceMax, setPriceMax] = useState(() => Number(getParamValue('maxPrice', '250')) || 250)
+  const [priceMax, setPriceMax] = useState(() => Number(getParamValue('maxPrice', '1000000')) || 1000000)
   const [currentPage, setCurrentPage] = useState(() => Number(getParamValue('page', '1')) || 1)
 
   useEffect(() => {
@@ -76,7 +84,7 @@ export function CategoryPage() {
     if (priceMin > 0) params.set('minPrice', String(priceMin))
     else params.delete('minPrice')
 
-    if (priceMax !== 250) params.set('maxPrice', String(priceMax))
+    if (priceMax !== 1000000) params.set('maxPrice', String(priceMax))
     else params.delete('maxPrice')
 
     if (currentPage > 1) params.set('page', String(currentPage))
@@ -120,7 +128,7 @@ export function CategoryPage() {
     setSelectedRating('0')
     setSelectedAvailability('all')
     setPriceMin(0)
-    setPriceMax(250)
+    setPriceMax(1000000)
     setCurrentPage(1)
   }
 
@@ -139,6 +147,14 @@ export function CategoryPage() {
         <h1 className="mt-3 text-4xl font-black md:text-5xl">{categoryInfo.name}</h1>
         <p className="mt-4 max-w-3xl text-base text-slate-200 md:text-lg">{categoryInfo.description}</p>
       </header>
+
+      <nav aria-label="Category navigation" className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 xl:hidden">
+        {catalogCategories.map((item) => (
+          <Link key={item.id} to={`/search?category=${encodeURIComponent(item.name)}`} className={`shrink-0 rounded-full border px-4 py-2 text-sm font-semibold ${item.name.toLowerCase() === categoryInfo.name.toLowerCase() ? 'border-brand-600 bg-brand-600 text-white' : 'border-slate-200 bg-white text-slate-700'}`}>
+            {item.name}
+          </Link>
+        ))}
+      </nav>
 
       <div className="grid gap-6 xl:grid-cols-[280px_1fr]">
         <FilterSidebar
@@ -195,20 +211,28 @@ export function CategoryPage() {
             </div>
           </div>
 
-          {paginatedProducts.length ? (
+          {loading ? (
+            <LoadingState className="md:col-span-2 xl:col-span-3" />
+          ) : loadError ? (
+            <ErrorState title="Category unavailable" message="We could not load this category right now. Please try again." action={<button type="button" onClick={() => setReloadKey((key) => key + 1)} className="rounded-xl bg-brand-600 px-4 py-2.5 font-semibold text-white">Try again</button>} className="md:col-span-2 xl:col-span-3" />
+          ) : paginatedProducts.length ? (
             <>
-              <div className="grid gap-6 grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
+              <div className="grid grid-cols-2 gap-4 sm:gap-5 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5">
                 {paginatedProducts.map((product) => (
                   <ProductCard
                     key={product.id}
                     product={{
+                      id: product.id,
+                      slug: product.slug,
                       name: product.name,
                       price: product.price,
                       shop: product.seller,
                       badge: product.badge ?? 'Featured',
                       rating: product.rating,
                       inStock: product.inStock,
-                      category: product.category
+                      category: product.category,
+                      imageUrl: product.images?.[0],
+                      hoverImageUrl: product.images?.[1]
                     }}
                   />
                 ))}
@@ -217,10 +241,7 @@ export function CategoryPage() {
               <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={(page) => setCurrentPage(page)} />
             </>
           ) : (
-            <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-10 text-center">
-              <h3 className="text-2xl font-black text-slate-900">No products found</h3>
-              <p className="mt-2 text-slate-600">Try resetting the filters or selecting another category.</p>
-            </div>
+            <EmptyState title="No products found" message="Try resetting the filters or selecting another category." className="md:col-span-2 xl:col-span-3" />
           )}
         </section>
       </div>

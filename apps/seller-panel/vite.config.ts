@@ -5,17 +5,39 @@ export default defineConfig({
   plugins: [react()],
   server: {
     host: '127.0.0.1',
-    port: 4177,
+    port: 4178,
     strictPort: true,
+    proxy: {
+      '/api': {
+        target: 'http://127.0.0.1:4003',
+        changeOrigin: true,
+      },
+      '/socket.io': {
+        target: 'http://127.0.0.1:4003',
+        changeOrigin: true,
+        ws: true,
+      },
+    },
     hmr: {
       host: '127.0.0.1',
-      port: 4177,
+      port: 4178,
       protocol: 'ws',
     },
   },
   preview: {
     host: '127.0.0.1',
-    port: 4177,
+    port: 4178,
     strictPort: true,
+    proxy: {
+      '/api': {
+        target: 'http://127.0.0.1:4003',
+        changeOrigin: true,
+      },
+      '/socket.io': {
+        target: 'http://127.0.0.1:4003',
+        changeOrigin: true,
+        ws: true,
+      },
+    },
   },
 })

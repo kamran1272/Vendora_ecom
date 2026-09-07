@@ -14,15 +14,22 @@ export default defineConfig({
         host: '127.0.0.1',
         port: 4173,
         strictPort: false,
-        hmr: {
-            host: '127.0.0.1',
-            port: 4173,
-            protocol: 'ws'
-        }
+        proxy: {
+            '/api': {
+                target: 'http://127.0.0.1:4003',
+                changeOrigin: true,
+            },
+        },
     },
     preview: {
         host: '127.0.0.1',
         port: 4173,
-        strictPort: false
+        strictPort: false,
+        proxy: {
+            '/api': {
+                target: 'http://127.0.0.1:4003',
+                changeOrigin: true,
+            },
+        },
     }
 });

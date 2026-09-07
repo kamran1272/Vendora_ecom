@@ -1,4 +1,5 @@
 import type { RecentOrder } from '../../types'
+import { Link } from 'react-router-dom'
 
 type RecentOrdersProps = {
   orders: RecentOrder[]
@@ -9,7 +10,7 @@ export function RecentOrders({ orders }: RecentOrdersProps) {
     <div className="rounded-[28px] bg-white p-5 shadow-sm ring-1 ring-slate-200">
       <div className="mb-4 flex items-center justify-between">
         <h3 className="text-xl font-semibold text-slate-900">Recent orders</h3>
-        <button className="text-sm font-medium text-sky-600">All</button>
+        <Link to="/admin/orders" className="text-sm font-medium text-sky-600">All</Link>
       </div>
 
       <div className="space-y-3">

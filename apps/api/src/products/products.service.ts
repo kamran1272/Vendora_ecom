@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@/database/prisma.service';
 
 @Injectable()
@@ -59,9 +59,11 @@ export class ProductsService {
       where: {
         warehouseProduct: {
           category: {
-            equals: category,
-            mode: 'insensitive',
+            contains: category,
           },
+        },
+      },
+      include: { warehouseProduct: true },
       orderBy: { createdAt: 'desc' },
     });
 
@@ -81,32 +83,8 @@ export class ProductsService {
   }
 
   async create(productData: any) {
-    const warehouseProduct = await this.prisma.warehouseProduct.create({
-      data: {
-        name: productData.name,
-        description: productData.description ?? '',
-        sku: productData.sku ?? `SKU-${Date.now()}`,
-        barcode: productData.barcode ?? null,
-        category: productData.category ?? 'General',
-        brand: productData.brand ?? 'Generic',
-        basePrice: Number(productData.price ?? 0),
-        sellerMargin: Number(productData.sellerMargin ?? 0),
-        stock: Number(productData.stock ?? 0),
-        status: productData.status ?? 'PUBLISHED',
-        images: JSON.stringify(productData.images ?? []),
-      },
-    });
-
-    const created = await this.prisma.sellerProduct.create({
-      data: {
-        sellerId: String(productData.sellerId ?? productData.seller_id ?? ''),
-        warehouseProductId: warehouseProduct.id,
-        sellingPrice: Number(productData.price ?? warehouseProduct.basePrice),
-      },
-      include: { warehouseProduct: true },
-    });
-
-    return this.normalizeProduct(created);
+    void productData;
+    throw new BadRequestException('Products must be created in the admin product warehouse and assigned through the seller storehouse.');
   }
 
   async update(id: number | string, productData: any) {

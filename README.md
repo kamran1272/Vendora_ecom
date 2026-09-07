@@ -1,49 +1,34 @@
-# Vendora E-commerce Monorepo
+# Vendora
 
-Vendora is a multi-vendor marketplace platform with a customer storefront, seller dashboard, admin console, and NestJS API. The project is organized as a monorepo and keeps the same workspace root while using separate app packages.
+Vendora is a multi-vendor ecommerce monorepo with a customer storefront, seller workspace, admin console, NestJS API, Prisma database, and shared TypeScript contracts.
 
-## Project structure
+## Applications
 
-- apps/web — customer storefront
-- apps/seller-panel — seller dashboard
-- apps/admin-panel — admin dashboard
-- apps/api — NestJS backend API
-- packages/shared — shared platform types and utilities
+```text
+apps/web          Customer storefront
+apps/seller-panel Seller workspace
+apps/admin-panel  Admin console
+apps/api          NestJS API and Prisma schema
+packages/shared   Shared contracts and utilities
+```
 
-## Core features
+The frontend applications use React, TypeScript, Vite, Tailwind CSS, and React Router. The API uses NestJS, Passport JWT, Helmet, throttling, class-validator, and Prisma. SQLite is used for local development; PostgreSQL is supported for production configuration.
 
-- Customer product browsing, cart, checkout flow, orders, and account pages
-- Seller registration and shop onboarding
-- Seller dashboard with earnings, withdrawals, orders, and products
-- Admin control for sellers, products, payouts, and platform reporting
-- JWT-based authentication and role-aware route protection
-- Local SQLite development mode and PostgreSQL-ready production configuration
+## Requirements
 
-## Technology stack
+- Node.js 18 or newer
+- npm 9 or newer
+- PostgreSQL for a production deployment
 
-- Frontend: React, TypeScript, Vite, Tailwind CSS, React Router
-- Backend: NestJS, TypeScript, JWT, Passport, Helmet, Throttler
-- Database: SQLite for local development; PostgreSQL-ready setup for production
-- Shared package: TypeScript contracts and common marketplace types
-
-## Prerequisites
-
-- Node.js 18+
-- npm 9+
-
-## Install dependencies
+## Install and configure
 
 ```bash
-cd "E:\Projects 2026\Vendora_ecommerce"
 npm install
 ```
 
-## Local environment setup
-
-Create the API environment file if it does not exist:
+Create `apps/api/.env` for local development:
 
 ```env
-# apps/api/.env
 NODE_ENV=development
 PORT=4003
 DB_TYPE=sqlite
@@ -54,28 +39,27 @@ THROTTLE_TTL=60
 THROTTLE_LIMIT=120
 ```
 
-For convenience, the workspace root also includes a local environment file used during startup:
+Initialize Prisma and the development database:
 
-```env
-# .env
-NODE_ENV=development
-PORT=4003
-DATABASE_URL="file:./apps/api/data/dev.sqlite"
-DB_TYPE=sqlite
-JWT_SECRET=replace-with-a-long-random-secret
-JWT_EXPIRES_IN=7d
-REDIS_URL=redis://localhost:6379
+```bash
+cd apps/api
+npx prisma validate --schema prisma/schema.prisma
+npx prisma generate --schema prisma/schema.prisma
+npx prisma migrate deploy --schema prisma/schema.prisma
+npm run seed:run
 ```
 
-## Start apps
+The local database is `apps/api/data/dev.sqlite`. Set `ADMIN_INITIAL_PASSWORD` before seeding if the seed requires an initial administrator password. Never reuse development credentials in production.
 
-### Start everything together
+## Run locally
+
+From the repository root:
 
 ```bash
 npm run dev
 ```
 
-### Start individual apps
+Or start one application:
 
 ```bash
 npm run dev:web
@@ -84,23 +68,67 @@ npm run dev:seller
 npm run dev:admin
 ```
 
-## Local URLs
+| Service | URL |
+| --- | --- |
+| Storefront | http://localhost:5173 |
+| Seller panel | http://localhost:4175 |
+| Admin panel | http://localhost:4176 |
+| API | http://127.0.0.1:4003/api |
+| Health check | http://127.0.0.1:4003/api/health |
 
-- Web storefront: http://localhost:5173
-- Seller panel: http://localhost:4175
-- Admin panel: http://localhost:4176
-- API: http://127.0.0.1:4003/api
-- Health check: http://127.0.0.1:4003/api/health
+## Core domain model
 
-## Build commands
+The seller catalog relationship is intentionally preserved as:
 
-```bash
-npm run build --workspace @vendora/api
-npm run build --workspace @vendora/web
+```text
+Seller
+	-> Shop (one shop per seller)
+		-> SellerProduct (seller listing)
+			-> WarehouseProduct (catalog source)
 ```
 
-## Notes
+Seller products are added from the warehouse storehouse. The API resolves the authenticated seller's shop, removes any previous assignment for the same seller and warehouse product, and recreates the assignment with that shop ID inside a transaction. This keeps duplicate assignments from accumulating while retaining the existing seller/shop ownership boundary.
 
-- The current local configuration uses SQLite so the app can run without an external PostgreSQL instance.
-- PostgreSQL is still supported in the project configuration when you are ready to switch to a production database.
-- Prisma is generated automatically during build/start for the API workspace.
+## Main API areas
+
+- Authentication and seller onboarding
+- Shop and seller profile management
+- Warehouse catalog browsing and imports
+- Seller product assignments, pricing, status, and bulk actions
+- Customer catalog, cart, checkout, orders, payments, reviews, and coupons
+- Admin seller approval, catalog management, reports, notifications, CMS, and settings
+- Product queries, support conversations, messages, and operational reporting
+
+Authenticated routes require the appropriate JWT role. Seller resources are scoped from the authenticated identity rather than caller-supplied seller IDs.
+
+## Database workflow
+
+The Prisma source of truth is `apps/api/prisma/schema.prisma`. Migrations live in `apps/api/prisma/migrations`.
+
+```bash
+cd apps/api
+npx prisma validate --schema prisma/schema.prisma
+npx prisma migrate deploy --schema prisma/schema.prisma
+npm run seed:run
+```
+
+Important persisted relationships include users and sellers, sellers and shops, warehouse products and seller products, orders and order items, payments, commissions, wallets, reviews, notifications, conversations, support tickets, and subscription plans.
+
+## Quality checks
+
+```bash
+npm run build
+npm run lint
+cd apps/api
+npx tsc --noEmit -p tsconfig.json
+```
+
+Build scripts generate Prisma clients and deploy migrations as part of the API build. Keep generated output, local databases, credentials, and logs out of commits.
+
+## Repository hygiene
+
+- Keep application code inside the existing workspace boundaries.
+- Prefer incremental module-level changes and typed service contracts.
+- Do not commit `.env` files, database journals, build output, dependency folders, or runtime logs.
+- Treat Prisma schema and migrations as the database source of truth.
+- Preserve the Seller -> Shop -> SellerProduct -> WarehouseProduct relationship when changing catalog flows.

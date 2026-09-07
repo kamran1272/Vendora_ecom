@@ -13,9 +13,10 @@ export const useWishlistStore = create<WishlistState>()(
     (set, get) => ({
       ids: [],
       toggle: (id) => {
-        const next = get().ids.includes(id)
-          ? get().ids.filter((item) => item !== id)
-          : [...get().ids, id]
+        const uniqueIds = [...new Set(get().ids)]
+        const next = uniqueIds.includes(id)
+          ? uniqueIds.filter((item) => item !== id)
+          : [...uniqueIds, id]
 
         set({ ids: next })
       },

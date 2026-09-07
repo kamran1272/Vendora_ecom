@@ -24,6 +24,8 @@ import { AdminModule } from './admin/admin.module';
 import { HealthController } from './health.controller';
 import { PrismaModule } from './database/prisma.module';
 import { ProductWarehouseModule } from './product-warehouse/product-warehouse.module';
+import { ChatModule } from './chat.disabled/chat.module';
+import { ProductQueriesModule } from './product-queries/product-queries.module';
 
 @Module({
   imports: [
@@ -57,6 +59,8 @@ import { ProductWarehouseModule } from './product-warehouse/product-warehouse.mo
     SettingsModule,
     AdminModule,
     ProductWarehouseModule,
+    ChatModule,
+    ProductQueriesModule,
   ],
   controllers: [HealthController],
   providers: [

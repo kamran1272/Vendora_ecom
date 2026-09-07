@@ -1,7 +1,9 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
+  Param,
   Post,
   Req,
   UseGuards,
@@ -66,6 +68,18 @@ export class AuthController {
   @Post('addresses')
   async addAddress(@Req() req: any, @Body() address: any) {
     return this.authService.addAddress(req.user.userId, address);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('addresses')
+  async getAddresses(@Req() req: any) {
+    return this.authService.getAddresses(req.user.userId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Delete('addresses/:id')
+  async deleteAddress(@Req() req: any, @Param('id') id: string) {
+    return this.authService.deleteAddress(req.user.userId, id);
   }
 
   @UseGuards(JwtAuthGuard)

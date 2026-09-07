@@ -90,28 +90,40 @@ export class CartService {
 
     const cart = await this.getOrCreateCart(userId);
     const productId = String(product.productId);
-    const existing = cart.items.find((item) => item.productId === productId);
+    const requestedWarehouseId = product.warehouseProductId ? String(product.warehouseProductId) : productId;
+    const listing = await this.prisma.sellerProduct.findFirst({
+      where: { OR: [{ id: productId }, { warehouseProductId: requestedWarehouseId }], status: 'ACTIVE', shopId: { not: null }, seller: { status: 'ACTIVE' }, warehouseProduct: { status: 'PUBLISHED' } },
+      include: { warehouseProduct: true },
+    });
+    if (!listing || listing.warehouseProduct.stock <= 0) {
+      throw new BadRequestException('This product is not currently available.');
+    }
+    const canonicalProductId = listing.warehouseProductId;
+    const canonicalListingId = listing.id;
+    const canonicalName = listing.warehouseProduct.name;
+    const canonicalPrice = Number(listing.sellingPrice);
+    const existing = cart.items.find((item) => item.productId === canonicalListingId || (item.warehouseProductId === canonicalProductId && item.sellerId === listing.sellerId));
 
     if (existing) {
       await this.prisma.cartItem.update({
         where: { id: existing.id },
         data: {
           quantity: existing.quantity + normalizedQty,
-          price: Number(product.price ?? existing.price),
-          name: product.name || existing.name,
-          sellerId: product.sellerId ? String(product.sellerId) : existing.sellerId,
-          warehouseProductId: product.warehouseProductId ?? existing.warehouseProductId,
+          price: canonicalPrice,
+          name: canonicalName,
+          sellerId: listing.sellerId,
+          warehouseProductId: canonicalProductId,
         },
       });
     } else {
       await this.prisma.cartItem.create({
         data: {
           cartId: cart.id,
-          productId,
-          warehouseProductId: product.warehouseProductId ?? null,
-          sellerId: product.sellerId ? String(product.sellerId) : null,
-          name: product.name || `Product ${productId}`,
-          price: Number(product.price ?? 99.99),
+          productId: canonicalListingId,
+          warehouseProductId: canonicalProductId,
+          sellerId: listing.sellerId,
+          name: canonicalName,
+          price: canonicalPrice,
           quantity: normalizedQty,
         },
       });

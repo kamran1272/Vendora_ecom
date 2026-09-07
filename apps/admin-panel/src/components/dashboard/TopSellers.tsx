@@ -1,4 +1,5 @@
 import type { SellerSummary } from '../../types'
+import { Link } from 'react-router-dom'
 
 type TopSellersProps = {
   sellers: SellerSummary[]
@@ -9,7 +10,7 @@ export function TopSellers({ sellers }: TopSellersProps) {
     <div className="rounded-[28px] bg-white p-5 shadow-sm ring-1 ring-slate-200">
       <div className="mb-4 flex items-center justify-between">
         <h3 className="text-xl font-semibold text-slate-900">Top sellers</h3>
-        <button className="text-sm font-medium text-sky-600">View all</button>
+        <Link to="/admin/sellers" className="text-sm font-medium text-sky-600">View all</Link>
       </div>
 
       <div className="space-y-3">

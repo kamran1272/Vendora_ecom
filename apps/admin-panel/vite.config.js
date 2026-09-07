@@ -6,6 +6,12 @@ export default defineConfig({
         host: '127.0.0.1',
         port: 4176,
         strictPort: true,
+        proxy: {
+            '/api': {
+                target: 'http://127.0.0.1:4003',
+                changeOrigin: true,
+            },
+        },
         hmr: {
             host: '127.0.0.1',
             port: 4176,
@@ -16,5 +22,11 @@ export default defineConfig({
         host: '127.0.0.1',
         port: 4176,
         strictPort: true,
+        proxy: {
+            '/api': {
+                target: 'http://127.0.0.1:4003',
+                changeOrigin: true,
+            },
+        },
     },
 });

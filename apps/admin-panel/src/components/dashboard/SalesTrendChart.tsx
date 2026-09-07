@@ -10,7 +10,7 @@ export function SalesTrendChart({ values }: SalesTrendChartProps) {
           <p className="text-sm text-slate-500">Performance</p>
           <h3 className="text-xl font-semibold text-slate-900">Sales trend</h3>
         </div>
-        <button className="rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700">This year</button>
+        <span className="rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-500">This year</span>
       </div>
 
       <div className="flex h-56 items-end gap-3">

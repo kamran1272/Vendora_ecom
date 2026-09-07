@@ -1,4 +1,5 @@
-import { Controller, Get, Post, Body, Param } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Req, UseGuards } from '@nestjs/common';
+import { JwtAuthGuard } from '@/auth/guards/jwt-auth.guard';
 import { ReviewsService } from './reviews.service';
 
 @Controller('reviews')
@@ -7,19 +8,23 @@ export class ReviewsController {
 
   @Get('product/:productId')
   findByProduct(@Param('productId') productId: string) {
-    return this.reviewsService.findByProduct(Number(productId));
+    return this.reviewsService.findByProduct(productId);
+  }
+
+  @Get('customer/current')
+  @UseGuards(JwtAuthGuard)
+  findByCustomer(@Req() req: any) {
+    return this.reviewsService.findByCustomer(req.user.userId);
   }
 
   @Post()
-  create(@Body() reviewData: any) {
-    return this.reviewsService.create(reviewData);
+  @UseGuards(JwtAuthGuard)
+  create(@Req() req: any, @Body() reviewData: any) {
+    return this.reviewsService.create(req.user.userId, reviewData);
   }
 
   @Get('product/:productId/average')
-  getAverageRating(@Param('productId') productId: string) {
-    return {
-      productId: Number(productId),
-      averageRating: this.reviewsService.getAverageRating(Number(productId)),
-    };
+  async getAverageRating(@Param('productId') productId: string) {
+    return { productId, averageRating: await this.reviewsService.getAverageRating(productId) };
   }
 }

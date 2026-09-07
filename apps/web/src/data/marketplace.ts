@@ -23,34 +23,27 @@ export const headerActions = [
   { key: 'cart', label: 'Cart', href: '/cart', icon: '🛒' }
 ]
 
-export const categoryItems = [
-  { name: 'Electronics', description: 'Smart devices and gaming setups', href: '/categories/electronics' },
-  { name: 'Home', description: 'Living essentials and interior upgrades', href: '/categories/home' },
-  { name: 'Fashion', description: 'Fresh looks for every season', href: '/categories/fashion' },
-  { name: 'Beauty', description: 'Premium routines and wellness picks', href: '/categories/beauty' },
-  { name: 'Sports', description: 'Outdoor gear and performance essentials', href: '/categories/sports' },
-  { name: 'Books', description: 'Learning, stories, and inspiration', href: '/categories/books' }
-]
+export const categoryItems: Array<{ name: string; description: string; href: string }> = []
+export const brandItems: Array<{ name: string; tag: string }> = []
 
-export const brandItems = [
-  { name: 'NorthPeak', tag: 'Smart living' },
-  { name: 'Aural', tag: 'Audio + sound' },
-  { name: 'Luma', tag: 'Home essentials' },
-  { name: 'Volt', tag: 'Power & lifestyle' },
-  { name: 'Summit', tag: 'Adventure gear' },
-  { name: 'Nova', tag: 'Modern design' }
-]
+export type MarketplaceCatalogItem = {
+  id: string
+  name: string
+  price: number
+  slug?: string
+  shop: string
+  badge?: string
+  category: string
+  brand: string
+  seller: string
+  rating: number
+  inStock: boolean
+  attributes: string[]
+  popularity: number
+  images?: string[]
+}
 
-export const productItems = [
-  { id: 'aero-bottle', name: 'Aero Bottle', price: 42, shop: 'Summit Goods', badge: 'Best seller', category: 'Sports', brand: 'Summit', seller: 'Summit Goods', rating: 4.9, inStock: true, attributes: ['travel', 'eco', 'insulated'], popularity: 98 },
-  { id: 'nova-lamp', name: 'Nova Lamp', price: 89, shop: 'Luma Home', badge: 'New arrival', category: 'Home', brand: 'Nova', seller: 'Luma Home', rating: 4.8, inStock: true, attributes: ['lighting', 'modern', 'decor'], popularity: 84 },
-  { id: 'pulse-watch', name: 'Pulse Watch', price: 199, shop: 'Volt Studio', badge: 'Trending', category: 'Electronics', brand: 'Volt', seller: 'Volt Studio', rating: 4.7, inStock: true, attributes: ['wearable', 'fitness', 'smart'], popularity: 92 },
-  { id: 'terra-backpack', name: 'Terra Backpack', price: 74, shop: 'Trail Works', badge: 'Top rated', category: 'Sports', brand: 'Summit', seller: 'Trail Works', rating: 4.6, inStock: false, attributes: ['outdoor', 'travel', 'waterproof'], popularity: 76 },
-  { id: 'smart-speaker', name: 'Smart Speaker', price: 129, shop: 'NorthPeak Studio', badge: 'Featured', category: 'Electronics', brand: 'NorthPeak', seller: 'NorthPeak Studio', rating: 4.9, inStock: true, attributes: ['voice', 'audio', 'smart-home'], popularity: 95 },
-  { id: 'echo-headset', name: 'Echo Headset', price: 149, shop: 'Aural Labs', badge: 'Popular', category: 'Electronics', brand: 'Aural', seller: 'Aural Labs', rating: 4.8, inStock: true, attributes: ['audio', 'wireless', 'gaming'], popularity: 87 },
-  { id: 'amber-hoodie', name: 'Amber Hoodie', price: 64, shop: 'Luma Style', badge: 'Popular', category: 'Fashion', brand: 'Luma', seller: 'Luma Style', rating: 4.5, inStock: true, attributes: ['cotton', 'casual', 'winter'], popularity: 72 },
-  { id: 'glow-serum', name: 'Glow Serum', price: 38, shop: 'Glow Atelier', badge: 'New arrival', category: 'Beauty', brand: 'Nova', seller: 'Glow Atelier', rating: 4.7, inStock: true, attributes: ['skincare', 'hydrating', 'organic'], popularity: 80 }
-]
+export const productItems: MarketplaceCatalogItem[] = []
 
 export type HomepageSectionType = 'hero' | 'categories' | 'brands' | 'products' | 'promo' | 'seller' | 'cta'
 
@@ -111,7 +104,7 @@ export const homepageConfig: HomepageSectionConfig[] = [
     eyebrow: 'New products',
     title: 'Fresh arrivals',
     subtitle: 'Recently published by top sellers',
-    productIds: ['aero-bottle', 'nova-lamp', 'pulse-watch', 'terra-backpack', 'smart-speaker', 'echo-headset']
+    productIds: []
   },
   {
     id: 'featured-products',
@@ -121,7 +114,7 @@ export const homepageConfig: HomepageSectionConfig[] = [
     eyebrow: 'Featured products',
     title: 'Curated picks',
     subtitle: 'Handpicked opportunities and best deals',
-    productIds: ['smart-speaker', 'nova-lamp', 'aero-bottle', 'pulse-watch', 'echo-headset', 'terra-backpack']
+    productIds: []
   },
   {
     id: 'top-selling-products',
@@ -131,7 +124,7 @@ export const homepageConfig: HomepageSectionConfig[] = [
     eyebrow: 'Top selling',
     title: 'Best performers',
     subtitle: 'Products customers are buying the most',
-    productIds: ['pulse-watch', 'smart-speaker', 'terra-backpack', 'echo-headset', 'aero-bottle', 'nova-lamp']
+    productIds: []
   },
   {
     id: 'promo-banners',

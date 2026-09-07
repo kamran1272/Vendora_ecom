@@ -3,9 +3,17 @@
 @tailwind utilities;
 
 :root {
-  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: 'DM Sans', 'Segoe UI', sans-serif;
+  --admin-bg: #f6f8fc;
+  --admin-surface: #ffffff;
+  --admin-text: #0f172a;
+  --admin-muted: #64748b;
+  --admin-border: #e2e8f0;
+  --admin-primary: #4f46e5;
+  --admin-radius: 1.25rem;
+  --admin-shadow: 0 14px 32px rgb(15 23 42 / 0.045);
   color: #0f172a;
-  background: #f8fafc;
+  background: var(--admin-bg);
   line-height: 1.5;
   font-weight: 400;
   font-synthesis: none;
@@ -14,8 +22,334 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
-html { scroll-behavior: smooth; }
-body { margin: 0; min-width: 320px; min-height: 100vh; }
-#root { min-height: 100vh; }
+html {
+  scroll-behavior: auto;
+}
 
-* { box-sizing: border-box; }
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background: var(--admin-bg);
+}
+
+button, input, select, textarea { font: inherit; }
+
+button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
+
+:focus-visible {
+  outline: 3px solid rgb(99 102 241 / 0.55);
+  outline-offset: 2px;
+}
+
+img, svg, video, canvas { max-width: 100%; }
+
+@layer components {
+  .admin-card {
+    border: 1px solid rgb(226 232 240 / 0.9);
+    border-radius: var(--admin-radius);
+    background: var(--admin-surface);
+    box-shadow: var(--admin-shadow);
+  }
+
+  .admin-control {
+    min-height: 2.75rem;
+    border: 1px solid var(--admin-border);
+    border-radius: 0.75rem;
+    background: #f8fafc;
+    padding: 0.625rem 0.75rem;
+    color: var(--admin-text);
+    font-size: 0.875rem;
+    outline: none;
+    transition: border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease;
+  }
+
+  .admin-control:focus {
+    border-color: #818cf8;
+    background: #fff;
+    box-shadow: 0 0 0 4px rgb(99 102 241 / 0.12);
+  }
+
+  .admin-button-primary {
+    min-height: 2.75rem;
+    border-radius: 0.75rem;
+    background: var(--admin-primary);
+    padding: 0.625rem 0.875rem;
+    color: #fff;
+    font-size: 0.875rem;
+    font-weight: 700;
+    transition: background-color 160ms ease, transform 160ms ease;
+  }
+
+  .admin-button-primary:hover { background: #4338ca; }
+  .admin-button-primary:active { transform: translateY(1px); }
+
+  .support-workspace {
+    box-shadow: 0 20px 55px rgb(15 23 42 / 0.08);
+  }
+
+  .support-header {
+    background: linear-gradient(135deg, #ffffff 0%, #f8fbff 62%, #eef6ff 100%);
+  }
+
+  .support-stat {
+    position: relative;
+    overflow: hidden;
+    min-height: 84px;
+    border-color: transparent;
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.7);
+  }
+
+  .support-stat::after {
+    position: absolute;
+    right: -20px;
+    bottom: -28px;
+    width: 92px;
+    height: 92px;
+    border-radius: 9999px;
+    background: rgb(255 255 255 / 0.5);
+    content: '';
+  }
+
+  .support-stat-open { background: #eaf5ff; }
+  .support-stat-pending { background: #fff7df; }
+  .support-stat-resolved { background: #eafaf2; }
+
+  .support-queue {
+    background: #f8fafc;
+    min-height: 0;
+    overflow-y: auto;
+    scrollbar-width: none;
+  }
+
+  .support-queue::-webkit-scrollbar { display: none; }
+
+  .support-grid { overflow: hidden; }
+
+  .support-message-row { animation: admin-fade-up 180ms ease-out both; }
+
+  .support-message { line-height: 1.45; }
+
+  .support-send-button:active { transform: translateY(1px); }
+
+  .support-field {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+
+  .support-field > span {
+    color: #64748b;
+    font-size: 0.65rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    line-height: 1;
+    text-transform: uppercase;
+  }
+
+  .support-field > span em {
+    color: #94a3b8;
+    font-size: 0.65rem;
+    font-style: normal;
+    font-weight: 500;
+    letter-spacing: 0;
+    text-transform: none;
+  }
+
+  .support-queue > input,
+  .support-thread input,
+  .support-thread select,
+  .support-thread textarea {
+    border-color: #dbe4ef;
+    background: #f8fafc;
+    transition: border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease;
+  }
+
+  .support-queue > input:focus,
+  .support-thread input:focus,
+  .support-thread select:focus,
+  .support-thread textarea:focus {
+    border-color: #7aa7d9;
+    background: #fff;
+    box-shadow: 0 0 0 4px rgb(45 128 216 / 0.11);
+  }
+
+  .support-thread > div:first-child {
+    background: #fff;
+  }
+
+  .support-messages {
+    background: #f3f7fb;
+    background-image: radial-gradient(rgb(148 163 184 / 0.16) 0.7px, transparent 0.7px);
+    background-size: 18px 18px;
+  }
+
+  .support-context {
+    background: #fbfcfe;
+  }
+
+  .support-context .rounded-xl {
+    border: 1px solid #e7edf4;
+    background: #fff;
+  }
+}
+
+input, select, textarea {
+  min-height: 44px;
+}
+
+input:focus, select:focus, textarea:focus {
+  border-color: rgb(129 140 248);
+  outline: none;
+  box-shadow: 0 0 0 4px rgb(99 102 241 / 0.12);
+}
+
+input:disabled, select:disabled, textarea:disabled, button:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.admin-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border-top: 1px solid #e2e8f0;
+  background: #f8fafc;
+  padding: 0.75rem 1rem;
+}
+
+.admin-pagination-button {
+  min-height: 40px;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.625rem;
+  background: #fff;
+  padding: 0.5rem 0.875rem;
+  color: #334155;
+  font-size: 0.875rem;
+  font-weight: 600;
+  transition: border-color 160ms ease, background-color 160ms ease, color 160ms ease;
+}
+
+.admin-pagination-button:hover:not(:disabled) {
+  border-color: #818cf8;
+  background: #eef2ff;
+  color: #4338ca;
+}
+
+.admin-pagination-status {
+  color: #64748b;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+table thead th {
+  position: sticky;
+  top: 68px;
+  z-index: 10;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1.25;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+table tbody tr {
+  transition: background-color 160ms ease;
+}
+
+table tbody tr:hover {
+  background-color: rgb(248 250 252 / 0.85);
+}
+
+table tbody td {
+  border-top: 1px solid #f1f5f9;
+  min-height: 56px;
+  padding-bottom: 0.875rem;
+  padding-top: 0.875rem;
+  vertical-align: middle;
+}
+
+table tbody tr:first-child td {
+  border-top-color: #e2e8f0;
+}
+
+.overflow-x-auto { max-width: 100%; -webkit-overflow-scrolling: touch; }
+
+@media (max-width: 639px) {
+  html { font-size: 15px; }
+
+  input, select, textarea { max-width: 100%; }
+
+  table thead th { position: static; }
+
+  .admin-pagination { gap: 0.5rem; padding: 0.625rem 0.75rem; }
+  .admin-pagination-button { min-height: 2.5rem; padding-inline: 0.625rem; }
+  .admin-pagination-status { font-size: 0.75rem; }
+
+  .support-composer { padding: 0.75rem; }
+  .support-ticket-fields { grid-template-columns: 1fr; }
+  .support-reply-row { flex-direction: column; }
+  .support-send-button { width: 100%; height: 2.75rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+}
+
+@keyframes admin-fade-up {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes admin-dialog-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+[role='dialog'] > form,
+[role='dialog'] > aside,
+[role='dialog'] > div {
+  border-radius: 1rem;
+  box-shadow: 0 24px 60px rgb(15 23 42 / 0.16);
+  animation: admin-dialog-in 180ms ease-out both;
+}
+
+[role='dialog'] { overscroll-behavior: contain; }
+
+main > div { animation: admin-fade-up 240ms ease-out both; }
+
+#root {
+  min-height: 100vh;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(148, 163, 184, 0.12);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.38);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(71, 85, 105, 0.5);
+}

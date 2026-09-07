@@ -1,0 +1,17 @@
+CREATE TABLE IF NOT EXISTS "payments" (
+	"id" TEXT NOT NULL PRIMARY KEY,
+	"orderId" TEXT NOT NULL UNIQUE,
+	"amount" REAL NOT NULL,
+	"fee" REAL NOT NULL DEFAULT 0,
+	"commission" REAL NOT NULL DEFAULT 0,
+	"method" TEXT NOT NULL DEFAULT 'stripe',
+	"status" TEXT NOT NULL DEFAULT 'PENDING',
+	"gateway" TEXT NOT NULL DEFAULT 'stripe',
+	"transactionId" TEXT,
+	"rawResponse" TEXT,
+	"createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	"updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	CONSTRAINT "payments_orderId_fkey" FOREIGN KEY ("orderId") REFERENCES "orders" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS "payments_orderId_key" ON "payments"("orderId");

@@ -1,5 +1,10 @@
+import { AdminAuthProvider } from './auth/AdminAuthContext'
 import { AdminRoutes } from './routes/AdminRoutes'
 
 export default function App() {
-  return <AdminRoutes />
+  return (
+    <AdminAuthProvider>
+      <AdminRoutes />
+    </AdminAuthProvider>
+  )
 }

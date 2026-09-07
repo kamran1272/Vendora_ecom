@@ -1,11 +1,10 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class PaymentsService {
-  private payouts: any[] = [];
-
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly notificationsService: NotificationsService) {}
 
   async processPayment(paymentData: any) {
     const amount = Number(paymentData?.amount ?? 0);
@@ -18,6 +17,8 @@ export class PaymentsService {
       where: { orderId: String(paymentData?.orderId) },
       update: {
         amount,
+        fee: Number(paymentData?.fee ?? 0),
+        commission: Number(paymentData?.commission ?? 0),
         method: paymentData?.method || 'stripe',
         status: paymentData?.status || 'COMPLETED',
         gateway: paymentData?.gateway || 'stripe',
@@ -27,6 +28,8 @@ export class PaymentsService {
       create: {
         orderId: String(paymentData?.orderId),
         amount,
+        fee: Number(paymentData?.fee ?? 0),
+        commission: Number(paymentData?.commission ?? 0),
         method: paymentData?.method || 'stripe',
         status: paymentData?.status || 'COMPLETED',
         gateway: paymentData?.gateway || 'stripe',
@@ -35,6 +38,7 @@ export class PaymentsService {
       },
     });
 
+    await this.notificationsService.notifyAdmins({ type: 'PAYMENT', title: 'Payment processed', message: `Payment for order ${payment.orderId} is ${payment.status}.`, entityId: payment.id, entityType: 'PAYMENT' });
     return payment;
   }
 
@@ -73,31 +77,28 @@ export class PaymentsService {
     };
   }
 
-  createPayout(sellerId: number, amount: number, method: string) {
-    const payout = {
-      id: this.payouts.length + 1,
-      sellerId,
-      amount: Number(amount),
-      method,
-      status: 'pending',
-      createdAt: new Date().toISOString(),
-    };
-    this.payouts.push(payout);
+  async createPayout(sellerId: number | string, amount: number, method: string) {
+    const seller = await this.prisma.seller.findUnique({ where: { id: String(sellerId) } });
+    if (!seller) throw new BadRequestException('Seller not found.');
+    if (!Number.isFinite(Number(amount)) || Number(amount) <= 0) throw new BadRequestException('Payout amount must be greater than zero.');
+    const payout = await this.prisma.withdrawal.create({ data: { sellerId: seller.id, amount: Number(amount), method: method || 'BANK_TRANSFER', status: 'PENDING' } });
+    await this.notificationsService.notifyAdmins({ type: 'WITHDRAWAL_REQUEST', title: 'Withdrawal request', message: `A seller requested a payout of $${Number(amount).toFixed(2)}.`, entityId: payout.id, entityType: 'WITHDRAWAL' });
     return payout;
   }
 
   getPayouts() {
-    return this.payouts;
+    return this.prisma.withdrawal.findMany({ include: { seller: { include: { user: true, shop: true } } }, orderBy: { requestedAt: 'desc' } });
   }
 
-  processPayout(id: number) {
-    const payout = this.payouts.find((entry) => entry.id === id);
-    if (!payout) {
-      throw new BadRequestException('Payout not found.');
-    }
+  async updatePayoutStatus(id: number | string, status: string) {
+    const normalizedStatus = String(status || '').toUpperCase();
+    if (!['PENDING', 'PROCESSING', 'PAID', 'REJECTED'].includes(normalizedStatus)) throw new BadRequestException('Invalid payout status.');
+    const payout = await this.prisma.withdrawal.findUnique({ where: { id: String(id) } });
+    if (!payout) throw new BadRequestException('Payout not found.');
+    return this.prisma.withdrawal.update({ where: { id: payout.id }, data: { status: normalizedStatus, processedAt: ['PAID', 'REJECTED'].includes(normalizedStatus) ? new Date() : null }, include: { seller: { include: { user: true, shop: true } } } });
+  }
 
-    payout.status = 'processed';
-    payout.processedAt = new Date().toISOString();
-    return { message: 'Payout processed successfully.', payout };
+  processPayout(id: number | string) {
+    return this.updatePayoutStatus(id, 'PAID');
   }
 }

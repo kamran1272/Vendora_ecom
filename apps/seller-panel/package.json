@@ -4,9 +4,9 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --host 127.0.0.1 --port 4177 --strictPort",
+    "dev": "vite --host 127.0.0.1 --port 4178 --strictPort",
     "build": "tsc -b && vite build",
-    "preview": "vite preview --host 127.0.0.1 --port 4177 --strictPort"
+    "preview": "vite preview --host 127.0.0.1 --port 4178 --strictPort"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.8.0",
@@ -20,6 +20,7 @@
     "react-dom": "19.2.0",
     "react-hook-form": "^7.15.0",
     "react-router-dom": "^6.28.0",
+    "socket.io-client": "^4.8.3",
     "tailwind-merge": "^2.5.5",
     "zod": "^3.24.0",
     "zustand": "^5.0.15"

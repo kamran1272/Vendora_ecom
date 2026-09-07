@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { PrismaService } from '@/database/prisma.service';
 
 export enum UserRole {
   SUPER_ADMIN = 'SUPER_ADMIN',
@@ -10,92 +11,35 @@ export enum UserRole {
 
 @Injectable()
 export class UsersService {
-  private users = [
-    {
-      id: 1,
-      email: 'superadmin@vendora.com',
-      name: 'Super Admin',
-      password: 'admin123',
-      role: UserRole.SUPER_ADMIN,
-      emailVerified: true,
-      twoFactorEnabled: true,
-      twoFactorCode: '123456',
-      shopStatus: 'approved',
-    },
-    {
-      id: 2,
-      email: 'admin@vendora.com',
-      name: 'Platform Admin',
-      password: 'admin123',
-      role: UserRole.ADMIN,
-      emailVerified: true,
-      twoFactorEnabled: true,
-      twoFactorCode: '654321',
-      shopStatus: 'n/a',
-    },
-    {
-      id: 3,
-      email: 'seller@vendora.com',
-      name: 'Jane Seller',
-      password: 'seller123',
-      role: UserRole.SELLER,
-      emailVerified: true,
-      twoFactorEnabled: false,
-      shopStatus: 'approved',
-    },
-    {
-      id: 4,
-      email: 'customer@vendora.com',
-      name: 'John Customer',
-      password: 'customer123',
-      role: UserRole.CUSTOMER,
-      emailVerified: true,
-      twoFactorEnabled: false,
-      addresses: [],
-      orders: [],
-      shopStatus: 'customer',
-    },
-  ];
+  constructor(private readonly prisma: PrismaService) {}
 
   findAll() {
-    return this.users;
+    return this.prisma.user.findMany({
+      select: { id: true, name: true, email: true, role: true, status: true, emailVerified: true, createdAt: true, updatedAt: true },
+      orderBy: { createdAt: 'desc' },
+    });
   }
 
-  findOne(id: number) {
-    return this.users.find((u) => u.id === id);
+  findOne(id: string) {
+    return this.prisma.user.findUnique({
+      where: { id },
+      select: { id: true, name: true, email: true, role: true, status: true, emailVerified: true, createdAt: true, updatedAt: true },
+    });
   }
 
   findByEmail(email: string) {
-    return this.users.find((u) => u.email.toLowerCase() === email.toLowerCase());
+    return this.prisma.user.findUnique({ where: { email: email.toLowerCase() } });
   }
 
   create(userData: any) {
-    const newUser = {
-      id: this.users.length + 1,
-      role: UserRole.CUSTOMER,
-      emailVerified: false,
-      twoFactorEnabled: false,
-      shopStatus: 'customer',
-      addresses: [],
-      orders: [],
-      ...userData,
-    };
-    this.users.push(newUser);
-    return newUser;
+    return this.prisma.user.create({ data: { ...userData, role: userData.role ?? UserRole.CUSTOMER, emailVerified: userData.emailVerified ?? false } });
   }
 
-  update(id: number, userData: any) {
-    const user = this.findOne(id);
-    if (user) {
-      Object.assign(user, userData);
-    }
-    return user;
+  update(id: string, userData: any) {
+    return this.prisma.user.update({ where: { id }, data: userData });
   }
 
-  remove(id: number) {
-    const index = this.users.findIndex((u) => u.id === id);
-    if (index > -1) {
-      return this.users.splice(index, 1);
-    }
+  remove(id: string) {
+    return this.prisma.user.delete({ where: { id } });
   }
 }

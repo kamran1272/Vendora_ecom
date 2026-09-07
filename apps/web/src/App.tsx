@@ -1,8 +1,44 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Link, Navigate, Route, Routes, useNavigate, useSearchParams } from 'react-router-dom'
-import { CategoryPage } from '@/pages/CategoryPage'
-import { ProductDetailPage } from '@/pages/ProductDetailPage'
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
+import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { CustomerHeader } from '@/components/layout/CustomerHeader'
+import { CustomerFooter } from '@/components/layout/CustomerFooter'
+import { SELLER_REGISTRATION_URL } from '@/config/customer'
+import { Button } from '@/components/ui/DesignSystem'
+import { StatCard } from '@/components/ui/StatCard'
+import { ErrorState, LoadingState } from '@/components/ui/FeedbackState'
+import { ToastHost } from '@/components/ui/ToastHost'
+import { apiRequest } from '@/services/api'
+import { formatCurrency } from '@/utils/format'
+import { fetchCatalogCategories, fetchCatalogBrands, fetchCatalogShops, fetchCatalogShop, type CatalogCategory, type CatalogBrand, type CatalogShop } from '@/services/catalog'
+import type { MarketplaceProduct } from '@/services/marketplace'
 import { useAuth } from '@/store/auth'
+import { getCartSubtotal, useCartStore } from '@/store/cart'
+import {
+  createChatConversation,
+  fetchChatConversations,
+  fetchChatMessages,
+  markConversationRead,
+  sendChatMessage,
+  type ChatConversation,
+  type ChatMessage,
+} from '@/services/chat'
+
+const CategoryPage = lazy(() => import('@/pages/CategoryPage').then(({ CategoryPage: page }) => ({ default: page })))
+const CustomerHomePage = lazy(() => import('./pages/HomePage').then(({ HomePage: page }) => ({ default: page })))
+const ProductDetailPage = lazy(() => import('@/pages/ProductDetailPage').then(({ ProductDetailPage: page }) => ({ default: page })))
+const CustomerSearchPage = lazy(() => import('@/pages/SearchPage').then(({ SearchPage: page }) => ({ default: page })))
+const CustomerCartPage = lazy(() => import('@/pages/CartPage').then(({ CartPage: page }) => ({ default: page })))
+const CustomerCheckoutPage = lazy(() => import('./pages/CheckoutPage').then(({ CheckoutPage: page }) => ({ default: page })))
+const CustomerOrdersPage = lazy(() => import('@/pages/OrdersPage').then(({ OrdersPage: page }) => ({ default: page })))
+const CustomerOrderDetailPage = lazy(() => import('@/pages/OrderDetailPage').then(({ OrderDetailPage: page }) => ({ default: page })))
+const CustomerWishlistPage = lazy(() => import('@/pages/WishlistPage').then(({ WishlistPage: page }) => ({ default: page })))
+const CustomerAccountPage = lazy(() => import('@/pages/AccountPage').then(({ AccountPage: page }) => ({ default: page })))
+const CustomerAddressesPage = lazy(() => import('@/pages/AddressesPage').then(({ AddressesPage: page }) => ({ default: page })))
+const CustomerProfilePage = lazy(() => import('@/pages/ProfilePage').then(({ ProfilePage: page }) => ({ default: page })))
+const CustomerPaymentMethodsPage = lazy(() => import('@/pages/PaymentMethodsPage').then(({ PaymentMethodsPage: page }) => ({ default: page })))
+const CustomerReviewsPage = lazy(() => import('@/pages/ReviewsPage').then(({ ReviewsPage: page }) => ({ default: page })))
+const CustomerNotificationsPage = lazy(() => import('@/pages/NotificationsPage').then(({ NotificationsPage: page }) => ({ default: page })))
+const TermsPage = lazy(() => import('@/pages/TermsPage').then(({ TermsPage: page }) => ({ default: page })))
 
 type HeaderNavItem = {
   id: string
@@ -35,7 +71,7 @@ const headerMeta = {
   searchPlaceholder: 'Search products...'
 }
 
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) || 'http://127.0.0.1:4003/api'
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) || '/api'
 
 function getStoredAccessToken() {
   return localStorage.getItem('access_token') || localStorage.getItem('accessToken')
@@ -56,9 +92,10 @@ function getStoredUserRole(): string | null {
 function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode; allowedRoles?: string[] }) {
   const token = getStoredAccessToken()
   const role = getStoredUserRole()
+  const location = useLocation()
 
   if (!token) {
-    return <Navigate to="/login" replace />
+    return <Navigate to="/login" replace state={{ from: { pathname: location.pathname, search: location.search } }} />
   }
 
   if (allowedRoles && (!role || !allowedRoles.includes(role))) {
@@ -66,23 +103,6 @@ function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode;
   }
 
   return <>{children}</>
-}
-
-async function apiRequest<T>(path: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path.startsWith('/') ? path : `/${path}`}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(options?.headers || {})
-    },
-    ...options,
-  })
-
-  if (!response.ok) {
-    const text = await response.text()
-    throw new Error(text || `Request failed with status ${response.status}`)
-  }
-
-  return (await response.json()) as T
 }
 
 function VendoraLogo({ compact = false }: { compact?: boolean }) {
@@ -127,81 +147,27 @@ function VendoraLogo({ compact = false }: { compact?: boolean }) {
 }
 
 function App() {
-  const navigation = apiNavigationItems.filter((item) => item.enabled)
-
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
-      <header className="border-b border-slate-200 bg-white/90 backdrop-blur">
-        <div className="mx-auto max-w-[1500px] px-4 py-3">
-          <div className="hidden items-center gap-4 md:flex">
-            <div className="flex min-w-0 flex-1 items-center gap-4">
-              <Link to="/" className="flex items-center">
-                <VendoraLogo compact />
-              </Link>
+      <CustomerHeader />
+      <ToastHost />
 
-              <label className="relative block min-w-[280px] flex-1">
-                <span className="sr-only">Search</span>
-                <input
-                  type="search"
-                  placeholder={headerMeta.searchPlaceholder}
-                  className="w-full rounded-full border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-brand-400 focus:bg-white"
-                />
-              </label>
-            </div>
-
-            <div className="flex items-center gap-3 text-sm text-slate-700">
-              <button className="rounded-full border border-slate-200 bg-white px-3 py-2 font-medium">{headerMeta.language}</button>
-              <button className="rounded-full border border-slate-200 bg-white px-3 py-2 font-medium">{headerMeta.currency}</button>
-            </div>
-
-            <div className="flex shrink-0 items-center gap-3">
-              {headerActions.map((action) => (
-                <Link key={action.key} to={action.href} className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50">
-                  <span>{action.icon}</span>
-                  <span>{action.label}</span>
-                </Link>
-              ))}
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3 md:hidden">
-            <button className="flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-xl text-slate-700">☰</button>
-            <Link to="/" className="flex flex-1 items-center justify-center">
-              <VendoraLogo compact />
-            </Link>
-            <div className="flex items-center gap-2">
-              <button className="flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-lg">⌕</button>
-              <Link to="/cart" className="flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-lg">🛒</Link>
-            </div>
-          </div>
-        </div>
-
-        <nav className="border-t border-slate-200 bg-slate-50/80">
-          <div className="mx-auto flex max-w-[1500px] flex-wrap items-center gap-2 px-4 py-3">
-            {navigation.map((item) => (
-              <Link key={item.id} to={item.href} className="rounded-full px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-white hover:text-[#1f2d4d]">
-                {item.label}
-              </Link>
-            ))}
-          </div>
-        </nav>
-      </header>
-
-      <main className="mx-auto max-w-7xl px-4 py-10">
+      <main className="mx-auto max-w-7xl px-4 py-6 pb-24 sm:py-10 md:pb-10">
+        <FloatingSupportButton />
+        <Suspense fallback={<LoadingState />}>
         <Routes>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/home" element={<HomePage />} />
-          <Route path="/shop" element={<ShopPage />} />
-          <Route path="/products" element={<SearchPage />} />
-          <Route path="/products/:slug" element={<ProductDetailPage />} />
+          <Route path="/" element={<CustomerHomePage />} />
+          <Route path="/home" element={<CustomerHomePage />} />
+          <Route path="/shop" element={<CustomerSearchPage />} />
+          <Route path="/products" element={<CustomerSearchPage />} />
           <Route path="/products/:id" element={<ProductDetailPage />} />
           <Route path="/categories" element={<CategoriesPage />} />
-          <Route path="/category" element={<CategoryPage />} />
+          <Route path="/category" element={<Navigate to="/categories" replace />} />
           <Route path="/category/:slug" element={<CategoryPage />} />
           <Route path="/categories/:slug" element={<CategoryPage />} />
           <Route path="/brands" element={<BrandsPage />} />
           <Route path="/brands/:slug" element={<BrandPage />} />
-          <Route path="/search" element={<SearchPage />} />
+          <Route path="/search" element={<CustomerSearchPage />} />
           <Route path="/shops" element={<ShopsPage />} />
           <Route path="/shops/:slug" element={<ShopDetailPage />} />
           <Route path="/shops/:slug/products" element={<ShopProductsPage />} />
@@ -215,27 +181,34 @@ function App() {
           <Route path="/contact" element={<ContactPage />} />
           <Route path="/careers" element={<CareersPage />} />
           <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
+          <Route path="/terms" element={<TermsPage />} />
           <Route path="/shipping" element={<ShippingPage />} />
           <Route path="/returns" element={<ReturnsPage />} />
           <Route path="/faq" element={<FAQPage />} />
           <Route path="/support" element={<SupportPage />} />
-          <Route path="/cart" element={<CartPage />} />
-          <Route path="/account" element={<ProtectedRoute><AccountPage /></ProtectedRoute>} />
-          <Route path="/account/profile" element={<ProtectedRoute><AccountProfilePage /></ProtectedRoute>} />
-          <Route path="/account/orders" element={<ProtectedRoute><AccountOrdersPage /></ProtectedRoute>} />
-          <Route path="/account/orders/:id" element={<ProtectedRoute><AccountOrderDetailPage /></ProtectedRoute>} />
-          <Route path="/account/addresses" element={<ProtectedRoute><AccountAddressesPage /></ProtectedRoute>} />
-          <Route path="/account/wishlist" element={<ProtectedRoute><AccountWishlistPage /></ProtectedRoute>} />
+          <Route path="/support/chat" element={<ProtectedRoute><CustomerMessagesPage /></ProtectedRoute>} />
+          <Route path="/account/messages" element={<ProtectedRoute><CustomerMessagesPage /></ProtectedRoute>} />
+          <Route path="/account/messages/:conversationId" element={<ProtectedRoute><CustomerMessagesPage /></ProtectedRoute>} />
+          <Route path="/account/support" element={<ProtectedRoute><SupportPage /></ProtectedRoute>} />
+          <Route path="/cart" element={<CustomerCartPage />} />
+          <Route path="/checkout" element={<ProtectedRoute><CustomerCheckoutPage /></ProtectedRoute>} />
+          <Route path="/account" element={<ProtectedRoute><CustomerAccountPage /></ProtectedRoute>} />
+          <Route path="/account/profile" element={<ProtectedRoute><CustomerProfilePage /></ProtectedRoute>} />
+          <Route path="/account/orders" element={<ProtectedRoute><CustomerOrdersPage /></ProtectedRoute>} />
+          <Route path="/account/orders/:id" element={<ProtectedRoute><CustomerOrderDetailPage /></ProtectedRoute>} />
+          <Route path="/account/addresses" element={<ProtectedRoute><CustomerAddressesPage /></ProtectedRoute>} />
+          <Route path="/account/payment-methods" element={<ProtectedRoute><CustomerPaymentMethodsPage /></ProtectedRoute>} />
+          <Route path="/account/wishlist" element={<ProtectedRoute><CustomerWishlistPage /></ProtectedRoute>} />
           <Route path="/account/compare" element={<ProtectedRoute><AccountComparePage /></ProtectedRoute>} />
-          <Route path="/account/reviews" element={<ProtectedRoute><AccountReviewsPage /></ProtectedRoute>} />
+          <Route path="/account/reviews" element={<ProtectedRoute><CustomerReviewsPage /></ProtectedRoute>} />
           <Route path="/account/questions" element={<ProtectedRoute><AccountQuestionsPage /></ProtectedRoute>} />
-          <Route path="/account/notifications" element={<ProtectedRoute><AccountNotificationsPage /></ProtectedRoute>} />
+          <Route path="/account/notifications" element={<ProtectedRoute><CustomerNotificationsPage /></ProtectedRoute>} />
           <Route path="/account/coupons" element={<ProtectedRoute><AccountCouponsPage /></ProtectedRoute>} />
           <Route path="/account/affiliate" element={<ProtectedRoute><AccountAffiliatePage /></ProtectedRoute>} />
           <Route path="/account/settings" element={<ProtectedRoute><AccountSettingsPage /></ProtectedRoute>} />
-          <Route path="/shops/create" element={<ProtectedRoute allowedRoles={['SELLER', 'ADMIN', 'SUPER_ADMIN']}><SellerSetupPage /></ProtectedRoute>} />
-          <Route path="/shops/:shopId" element={<ProtectedRoute><SellerShopOverviewPage /></ProtectedRoute>} />
-          <Route path="/shops/:shopId/settings" element={<ProtectedRoute allowedRoles={['SELLER', 'ADMIN', 'SUPER_ADMIN']}><SellerShopSettingsPage /></ProtectedRoute>} />
+          <Route path="/shops/create" element={<SellerRegistrationRedirect />} />
+          <Route path="/seller/shops/:shopId" element={<ProtectedRoute><SellerShopOverviewPage /></ProtectedRoute>} />
+          <Route path="/seller/shops/:shopId/settings" element={<ProtectedRoute allowedRoles={['SELLER', 'ADMIN', 'SUPER_ADMIN']}><SellerShopSettingsPage /></ProtectedRoute>} />
           <Route path="/seller" element={<ProtectedRoute allowedRoles={['SELLER', 'ADMIN', 'SUPER_ADMIN']}><SellerDashboardPage /></ProtectedRoute>} />
           <Route path="/seller/dashboard" element={<ProtectedRoute allowedRoles={['SELLER', 'ADMIN', 'SUPER_ADMIN']}><SellerDashboardPage /></ProtectedRoute>} />
           <Route path="/seller/products" element={<ProtectedRoute allowedRoles={['SELLER', 'ADMIN', 'SUPER_ADMIN']}><SellerProductsPage /></ProtectedRoute>} />
@@ -297,37 +270,16 @@ function App() {
           <Route path="/admin/settings" element={<ProtectedRoute allowedRoles={['ADMIN', 'SUPER_ADMIN']}><AdminSettingsPage /></ProtectedRoute>} />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
+        </Suspense>
       </main>
+      <CustomerFooter />
     </div>
   )
 }
 
-const categoryItems = [
-  { name: 'Electronics', description: 'Smart devices and gaming setups', href: '/categories/electronics' },
-  { name: 'Home', description: 'Living essentials and interior upgrades', href: '/categories/home' },
-  { name: 'Fashion', description: 'Fresh looks for every season', href: '/categories/fashion' },
-  { name: 'Beauty', description: 'Premium routines and wellness picks', href: '/categories/beauty' },
-  { name: 'Sports', description: 'Outdoor gear and performance essentials', href: '/categories/sports' },
-  { name: 'Books', description: 'Learning, stories, and inspiration', href: '/categories/books' }
-]
-
-const brandItems = [
-  { name: 'NorthPeak', tag: 'Smart living' },
-  { name: 'Aural', tag: 'Audio + sound' },
-  { name: 'Luma', tag: 'Home essentials' },
-  { name: 'Volt', tag: 'Power & lifestyle' },
-  { name: 'Summit', tag: 'Adventure gear' },
-  { name: 'Nova', tag: 'Modern design' }
-]
-
-const productItems = [
-  { name: 'Aero Bottle', price: '$42', shop: 'Summit Goods', badge: 'Best seller' },
-  { name: 'Nova Lamp', price: '$89', shop: 'Luma Home', badge: 'New arrival' },
-  { name: 'Pulse Watch', price: '$199', shop: 'Volt Studio', badge: 'Trending' },
-  { name: 'Terra Backpack', price: '$74', shop: 'Trail Works', badge: 'Top rated' },
-  { name: 'Smart Speaker', price: '$129', shop: 'NorthPeak Studio', badge: 'Featured' },
-  { name: 'Echo Headset', price: '$149', shop: 'Aural Labs', badge: 'Popular' }
-]
+const categoryItems: Array<{ name: string; description: string; href: string }> = []
+const brandItems: Array<{ name: string; tag: string }> = []
+const productItems: Array<{ name: string; price: string; shop: string; badge: string }> = []
 
 type HomepageSectionType = 'hero' | 'categories' | 'brands' | 'products' | 'promo' | 'seller' | 'cta'
 
@@ -394,7 +346,7 @@ const homepageConfig: HomepageSectionConfig[] = [
     eyebrow: 'New products',
     title: 'Fresh arrivals',
     subtitle: 'Recently published by top sellers',
-    productIds: ['aero-bottle', 'nova-lamp', 'pulse-watch', 'terra-backpack', 'smart-speaker', 'echo-headset']
+    productIds: []
   },
   {
     id: 'featured-products',
@@ -404,7 +356,7 @@ const homepageConfig: HomepageSectionConfig[] = [
     eyebrow: 'Featured products',
     title: 'Curated picks',
     subtitle: 'Handpicked opportunities and best deals',
-    productIds: ['smart-speaker', 'nova-lamp', 'aero-bottle', 'pulse-watch', 'echo-headset', 'terra-backpack']
+    productIds: []
   },
   {
     id: 'top-selling-products',
@@ -414,7 +366,7 @@ const homepageConfig: HomepageSectionConfig[] = [
     eyebrow: 'Top selling',
     title: 'Best performers',
     subtitle: 'Products customers are buying the most',
-    productIds: ['pulse-watch', 'smart-speaker', 'terra-backpack', 'echo-headset', 'aero-bottle', 'nova-lamp']
+    productIds: []
   },
   {
     id: 'promo-banners',
@@ -496,25 +448,10 @@ function renderHomepageSection(section: HomepageSectionConfig) {
           </div>
 
           <div className="rounded-[1.6rem] bg-white/10 p-5 backdrop-blur-sm ring-1 ring-white/10">
-            <div className="grid gap-4">
-              <div className="rounded-[1.2rem] bg-white p-4 text-slate-900 shadow-lg">
-                <p className="text-[0.7rem] uppercase tracking-[0.25em] text-slate-500">Featured shop</p>
-                <div className="mt-3 flex items-center justify-between">
-                  <div>
-                    <p className="text-lg font-bold">Smart Speaker</p>
-                    <p className="text-sm text-slate-500">by NorthPeak Studio</p>
-                  </div>
-                  <span className="text-xl font-black text-[#1f2d4d]">$129</span>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                {[
-                  { label: 'Customers', value: '12.4k' },
-                  { label: 'Seller shops', value: '1.1k' },
-                  { label: 'Monthly sales', value: '$48k' },
-                  { label: 'Ratings', value: '4.9/5' }
-                ].map((card) => <StatCard key={card.label} label={card.label} value={card.value} />)}
-              </div>
+            <div className="rounded-[1.2rem] bg-white p-5 text-slate-900 shadow-lg">
+              <p className="text-[0.7rem] uppercase tracking-[0.25em] text-slate-500">Live marketplace</p>
+              <p className="mt-3 text-lg font-bold">Explore the active catalog</p>
+              <p className="mt-2 text-sm text-slate-500">Product availability and seller information come directly from the marketplace API.</p>
             </div>
           </div>
         </section>
@@ -680,88 +617,57 @@ function SectionHeader({ eyebrow, title, subtitle, actionLabel, actionTo }: { ey
 }
 
 function ShopPage() {
-  const products = [
-    { name: 'Aero Bottle', price: '$42', shop: 'Summit Goods' },
-    { name: 'Nova Lamp', price: '$89', shop: 'Luma Home' },
-    { name: 'Pulse Watch', price: '$199', shop: 'Volt Studio' },
-    { name: 'Terra Backpack', price: '$74', shop: 'Trail Works' }
-  ]
-
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-3xl font-bold">Browse products</h2>
-        <span className="rounded-full bg-slate-200 px-3 py-1 text-sm text-slate-700">4 items</span>
-      </div>
-
-      <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
-        {products.map((product) => (
-          <div key={product.name} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="h-40 bg-gradient-to-br from-slate-200 to-slate-100" />
-            <div className="space-y-3 p-4">
-              <p className="text-sm text-slate-500">{product.shop}</p>
-              <h3 className="text-xl font-bold">{product.name}</h3>
-              <div className="flex items-center justify-between">
-                <span className="text-lg font-black text-brand-700">{product.price}</span>
-                <button className="rounded-full bg-slate-900 px-3 py-2 text-sm font-semibold text-white">Add to cart</button>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
+  return <CustomerSearchPage />
 }
 
 function CategoriesPage() {
-  const categories = ['Electronics', 'Home', 'Fashion', 'Beauty', 'Sports', 'Books']
+  const [categories, setCategories] = useState<CatalogCategory[]>([])
+  const [error, setError] = useState(false)
+
+  useEffect(() => {
+    fetchCatalogCategories().then((items) => setCategories([...new Map(items.map((item) => [item.id, item])).values()])).catch(() => setError(true))
+  }, [])
 
   return (
     <div className="space-y-6">
-      <h2 className="text-3xl font-bold">Categories</h2>
-      <div className="grid gap-4 md:grid-cols-3">
-        {categories.map((category) => (
-          <div key={category} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <p className="text-lg font-semibold">{category}</p>
-            <p className="mt-2 text-sm text-slate-500">Curated collections and featured sellers.</p>
-          </div>
-        ))}
-      </div>
+      <PageShell title="Categories" description="Browse categories represented by current marketplace inventory." />
+      {error ? <ErrorState title="Categories unavailable" message="We could not load live categories right now. Please try again." action={<button type="button" onClick={() => window.location.reload()} className="rounded-xl bg-brand-600 px-4 py-2.5 font-semibold text-white">Try again</button>} /> : categories.length === 0 ? <LoadingState /> : <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">{categories.map((category) => <Link key={category.id} to={`/search?category=${encodeURIComponent(category.name)}`} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:border-brand-300"><h2 className="text-lg font-semibold text-slate-900">{category.name}</h2><p className="mt-2 text-sm text-slate-500">{category.description || 'Browse current products in this category.'}</p></Link>)}</div>}
     </div>
   )
 }
 
 function BrandsPage() {
-  const brands = ['Aural', 'NorthPeak', 'Luma', 'Volt', 'Summit', 'Nova']
+  const [brands, setBrands] = useState<CatalogBrand[]>([])
+  const [error, setError] = useState(false)
+
+  useEffect(() => {
+    fetchCatalogBrands().then((items) => setBrands([...new Map(items.map((item) => [item.id, item])).values()])).catch(() => setError(true))
+  }, [])
 
   return (
     <div className="space-y-6">
-      <h2 className="text-3xl font-bold">Brands</h2>
-      <div className="grid gap-4 md:grid-cols-3">
-        {brands.map((brand) => (
-          <div key={brand} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <p className="text-lg font-semibold">{brand}</p>
-            <p className="mt-2 text-sm text-slate-500">Premium products and storefronts.</p>
-          </div>
-        ))}
-      </div>
+      <PageShell title="Brands" description="Explore brands with products currently listed by marketplace sellers." />
+      {error ? <ErrorState title="Brands unavailable" message="We could not load live brands right now. Please try again." action={<button type="button" onClick={() => window.location.reload()} className="rounded-xl bg-brand-600 px-4 py-2.5 font-semibold text-white">Try again</button>} /> : brands.length === 0 ? <LoadingState /> : <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">{brands.map((brand) => <Link key={brand.id} to={`/brands/${encodeURIComponent(brand.id)}`} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:border-brand-300"><h2 className="text-lg font-semibold text-slate-900">{brand.name}</h2><p className="mt-2 text-sm text-slate-500">{brand.description || 'View products from this brand.'}</p></Link>)}</div>}
     </div>
   )
 }
 
 function BrandPage() {
-  return <PageShell title="NorthPeak" description="A premium brand collection offering smart home and lifestyle essentials." />
+  const { slug } = useParams()
+  const [brand, setBrand] = useState<CatalogBrand | null>(null)
+  const [error, setError] = useState(false)
+
+  useEffect(() => {
+    if (!slug) return
+    fetchCatalogBrands().then((items) => setBrand(items.find((item) => item.id === slug || item.name.toLowerCase() === decodeURIComponent(slug).toLowerCase()) || null)).catch(() => setError(true))
+  }, [slug])
+
+  if (error) return <ErrorState title="Brand unavailable" message="We could not load this brand right now. Please try again." action={<button type="button" onClick={() => window.location.reload()} className="rounded-xl bg-brand-600 px-4 py-2.5 font-semibold text-white">Try again</button>} />
+  if (!brand) return <LoadingState />
+  return <Navigate to={`/search?brand=${encodeURIComponent(brand.name)}`} replace />
 }
 
-const marketplaceSearchCatalog = [
-  { id: 'aero-bottle', name: 'Aero Bottle', category: 'Sports', brand: 'Summit', seller: 'Summit Goods', price: 42, rating: 4.9, inStock: true, attributes: ['travel', 'eco', 'insulated'], popularity: 98 },
-  { id: 'nova-lamp', name: 'Nova Lamp', category: 'Home', brand: 'Nova', seller: 'Luma Home', price: 89, rating: 4.8, inStock: true, attributes: ['lighting', 'modern', 'decor'], popularity: 84 },
-  { id: 'pulse-watch', name: 'Pulse Watch', category: 'Electronics', brand: 'Volt', seller: 'Volt Studio', price: 199, rating: 4.7, inStock: true, attributes: ['wearable', 'fitness', 'smart'], popularity: 92 },
-  { id: 'terra-backpack', name: 'Terra Backpack', category: 'Sports', brand: 'Summit', seller: 'Trail Works', price: 74, rating: 4.6, inStock: false, attributes: ['outdoor', 'travel', 'waterproof'], popularity: 76 },
-  { id: 'smart-speaker', name: 'Smart Speaker', category: 'Electronics', brand: 'NorthPeak', seller: 'NorthPeak Studio', price: 129, rating: 4.9, inStock: true, attributes: ['voice', 'audio', 'smart-home'], popularity: 95 },
-  { id: 'echo-headset', name: 'Echo Headset', category: 'Electronics', brand: 'Aural', seller: 'Aural Labs', price: 149, rating: 4.8, inStock: true, attributes: ['audio', 'wireless', 'gaming'], popularity: 87 },
-  { id: 'amber-hoodie', name: 'Amber Hoodie', category: 'Fashion', brand: 'Luma', seller: 'Luma Style', price: 64, rating: 4.5, inStock: true, attributes: ['cotton', 'casual', 'winter'], popularity: 72 },
-  { id: 'glow-serum', name: 'Glow Serum', category: 'Beauty', brand: 'Nova', seller: 'Glow Atelier', price: 38, rating: 4.7, inStock: true, attributes: ['skincare', 'hydrating', 'organic'], popularity: 80 }
+const marketplaceSearchCatalog: MarketplaceProduct[] = [
 ]
 
 const searchSortOptions = [
@@ -782,7 +688,7 @@ function SearchPage() {
   const brand = searchParams.get('brand') ?? 'all'
   const seller = searchParams.get('seller') ?? 'all'
   const priceMin = Number(searchParams.get('priceMin') ?? 0)
-  const priceMax = Number(searchParams.get('priceMax') ?? 250)
+  const priceMax = Number(searchParams.get('priceMax') ?? 1000000)
   const minRating = Number(searchParams.get('rating') ?? 0)
   const availability = searchParams.get('availability') ?? 'all'
   const sort = searchParams.get('sort') ?? 'relevance'
@@ -1013,23 +919,46 @@ function SearchPage() {
 }
 
 function ShopsPage() {
-  return <PageShell title="Marketplace shops" description="Explore seller storefronts, specialty shops, and top-performing stores." />
+  const [shops, setShops] = useState<CatalogShop[]>([])
+  const [error, setError] = useState(false)
+
+  useEffect(() => {
+    fetchCatalogShops().then((items) => setShops([...new Map(items.map((item) => [item.id, item])).values()])).catch(() => setError(true))
+  }, [])
+
+  if (error) return <ErrorState title="Shops unavailable" message="We could not load live shops right now. Please try again." action={<button type="button" onClick={() => window.location.reload()} className="rounded-xl bg-brand-600 px-4 py-2.5 font-semibold text-white">Try again</button>} />
+  return <div className="space-y-6"><PageShell title="Marketplace shops" description="Explore seller storefronts represented by live marketplace records." />{shops.length === 0 ? <LoadingState /> : <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{shops.map((shop) => <Link key={shop.id} to={`/shops/${encodeURIComponent(shop.id)}`} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:border-brand-300"><h2 className="text-lg font-semibold text-slate-900">{shop.name}</h2><p className="mt-2 text-sm text-slate-500">{shop.description || 'View products and seller information.'}</p></Link>)}</div>}</div>
 }
 
 function ShopDetailPage() {
-  return <PageShell title="NorthPeak Studio" description="Shop storefront profile with seller bio, featured products, and trust signals." />
+  const { slug } = useParams()
+  const [shop, setShop] = useState<CatalogShop | null>(null)
+  const [error, setError] = useState(false)
+  useEffect(() => { if (slug) fetchCatalogShop(slug).then(setShop).catch(() => setError(true)) }, [slug])
+  if (error) return <ErrorState title="Shop unavailable" message="We could not load this shop right now. Please try again." action={<button type="button" onClick={() => window.location.reload()} className="rounded-xl bg-brand-600 px-4 py-2.5 font-semibold text-white">Try again</button>} />
+  if (!shop) return <LoadingState />
+  return <Navigate to={`/search?seller=${encodeURIComponent(shop.name)}`} replace />
 }
 
 function ShopProductsPage() {
-  return <PageShell title="NorthPeak Studio products" description="All products available from this shop in one storefront listing." />
+  const { slug } = useParams()
+  const [shop, setShop] = useState<CatalogShop | null>(null)
+  useEffect(() => { if (slug) fetchCatalogShop(slug).then(setShop).catch(() => setShop(null)) }, [slug])
+  if (!shop) return <LoadingState />
+  return <Navigate to={`/search?seller=${encodeURIComponent(shop.name)}`} replace />
 }
 
 function ShopTopSellingPage() {
-  return <PageShell title="Top selling" description="Best-performing products from this shop and their trends." />
+  const { slug } = useParams()
+  const [shop, setShop] = useState<CatalogShop | null>(null)
+  useEffect(() => { if (slug) fetchCatalogShop(slug).then(setShop).catch(() => setShop(null)) }, [slug])
+  if (!shop) return <LoadingState />
+  return <Navigate to={`/search?seller=${encodeURIComponent(shop.name)}&sort=top-selling`} replace />
 }
 
 function AuthPage({ mode }: { mode: 'login' | 'register' }) {
   const navigate = useNavigate()
+  const location = useLocation()
   const { login } = useAuth()
   const [form, setForm] = useState({
     name: '',
@@ -1050,17 +979,10 @@ function AuthPage({ mode }: { mode: 'login' | 'register' }) {
         ? { email: form.email, password: form.password }
         : { name: form.name, email: form.email, password: form.password }
 
-      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      const data = await apiRequest<{ accessToken?: string; access_token?: string; token?: string; user?: Record<string, unknown> }>(endpoint, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data?.message || 'Authentication failed')
-      }
 
       const token = data.accessToken || data.access_token
       if (token) {
@@ -1083,9 +1005,12 @@ function AuthPage({ mode }: { mode: 'login' | 'register' }) {
         return
       }
 
-      navigate('/')
+      const destination = (location.state as { from?: { pathname?: string; search?: string } } | null)?.from
+      navigate(destination?.pathname ? `${destination.pathname}${destination.search || ''}` : '/')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Authentication failed')
+      setError(err instanceof TypeError && err.message === 'Failed to fetch'
+        ? 'Unable to reach Vendora services. Please make sure the web app and API are running, then try again.'
+        : err instanceof Error ? err.message : 'Authentication failed')
     } finally {
       setLoading(false)
     }
@@ -1125,18 +1050,17 @@ function AuthPage({ mode }: { mode: 'login' | 'register' }) {
           onChange={(value) => setForm((current) => ({ ...current, password: value }))}
         />
       </div>
-      <button
-        type="submit"
-        disabled={loading}
-        className="mt-8 rounded-full bg-brand-600 px-5 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-70"
-      >
-        {loading ? 'Please wait...' : mode === 'login' ? 'Login' : 'Create account'}
-      </button>
+      <Button type="submit" loading={loading} loadingLabel="Please wait..." className="mt-8">
+        {mode === 'login' ? 'Login' : 'Create account'}
+      </Button>
 
       {mode === 'login' && (
         <div className="mt-6 flex flex-col items-center gap-3 text-sm text-slate-600">
           <Link to="/register" className="font-medium text-brand-600 hover:text-brand-700">
             Create account
+          </Link>
+          <Link to="/forgot-password" className="font-medium text-slate-700 hover:text-slate-900">
+            Forgot password?
           </Link>
           <Link to="/seller" className="font-medium text-slate-700 hover:text-slate-900">
             Become Seller
@@ -1148,20 +1072,83 @@ function AuthPage({ mode }: { mode: 'login' | 'register' }) {
 }
 
 function ForgotPasswordPage() {
+  const [email, setEmail] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [message, setMessage] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault()
+    setLoading(true)
+    setMessage(null)
+    setError(null)
+    try {
+      const response = await apiRequest<{ message?: string }>('/auth/forgot-password', {
+        method: 'POST',
+        body: JSON.stringify({ email: email.trim() }),
+      })
+      setMessage(response.message || 'If an account matches that email, reset instructions have been sent.')
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Unable to start password recovery.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
-    <div className="mx-auto max-w-xl rounded-3xl bg-white p-8 shadow-sm ring-1 ring-slate-200">
+    <form onSubmit={submit} className="mx-auto max-w-xl rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200 sm:p-8">
       <p className="text-sm font-semibold uppercase tracking-[0.2em] text-brand-600">Account recovery</p>
-      <h2 className="mt-3 text-3xl font-bold">Forgot your password?</h2>
-      <div className="mt-8">
-        <Field label="Email" placeholder="you@example.com" />
-      </div>
-      <button className="mt-8 rounded-full bg-brand-600 px-5 py-3 font-semibold text-white">Send reset link</button>
-    </div>
+      <h1 className="mt-3 text-3xl font-bold text-slate-900">Forgot your password?</h1>
+      <p className="mt-3 text-sm leading-6 text-slate-600">Enter the email on your Vendora account and we will send recovery instructions if it exists.</p>
+      {error && <div className="mt-5 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700" role="alert">{error}</div>}
+      {message && <div className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700" role="status">{message}</div>}
+      <div className="mt-6"><Field label="Email" type="email" autoComplete="email" placeholder="you@example.com" value={email} onChange={(value) => setEmail(value)} required /></div>
+      <Button type="submit" loading={loading} loadingLabel="Sending..." className="mt-6">Send reset link</Button>
+      <Link to="/login" className="mt-5 block text-center text-sm font-semibold text-brand-700 hover:text-brand-800">Back to login</Link>
+    </form>
   )
 }
 
 function ResetPasswordPage() {
-  return <PageShell title="Reset password" description="Set a new password for your Vendora account." />
+  const { token } = useParams()
+  const navigate = useNavigate()
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [message, setMessage] = useState<string | null>(null)
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault()
+    if (!token) return setError('This password reset link is missing its token.')
+    if (password.length < 8) return setError('Choose a password with at least 8 characters.')
+    if (password !== confirmPassword) return setError('Passwords do not match.')
+    setLoading(true)
+    setError(null)
+    try {
+      const response = await apiRequest<{ message?: string }>('/auth/reset-password', {
+        method: 'POST',
+        body: JSON.stringify({ token, newPassword: password }),
+      })
+      setMessage(response.message || 'Your password has been reset. Redirecting to login...')
+      window.setTimeout(() => navigate('/login', { replace: true }), 1200)
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Unable to reset your password.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="mx-auto max-w-xl rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200 sm:p-8">
+      <p className="text-sm font-semibold uppercase tracking-[0.2em] text-brand-600">Account recovery</p>
+      <h1 className="mt-3 text-3xl font-bold text-slate-900">Reset password</h1>
+      {error && <div className="mt-5 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700" role="alert">{error}</div>}
+      {message && <div className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700" role="status">{message}</div>}
+      <div className="mt-6 grid gap-5"><Field label="New password" type="password" autoComplete="new-password" value={password} onChange={setPassword} required /><Field label="Confirm password" type="password" autoComplete="new-password" value={confirmPassword} onChange={setConfirmPassword} required /></div>
+      <Button type="submit" loading={loading} loadingLabel="Resetting..." className="mt-6">Set new password</Button>
+    </form>
+  )
 }
 
 function VerifyEmailPage() {
@@ -1190,10 +1177,104 @@ function AccountPage() {
 }
 
 function AccountProfilePage() { return <PageShell title="Profile" description="Edit your personal profile information and account details." /> }
-function AccountOrdersPage() { return <PageShell title="Orders" description="Track recent orders, delivery updates, and purchase history." /> }
-function AccountOrderDetailPage() { return <PageShell title="Order details" description="View the product breakdown, status timeline, and payment summary for this order." /> }
+
+function AccountOrdersPage() {
+  const { user } = useAuth()
+  const [orders, setOrders] = useState<any[]>([])
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (!user?.id) {
+      return
+    }
+
+    apiRequest<any[]>(`/orders/user/${user.id}`)
+      .then((items) => setOrders(items))
+      .catch((err) => setError(err instanceof Error ? err.message : 'Unable to load orders.'))
+      .finally(() => setLoading(false))
+  }, [user?.id])
+
+  return (
+    <div className="space-y-6">
+      <PageShell title="Orders" description="Track recent orders, delivery updates, and purchase history." />
+      {error ? <div className="rounded-[2rem] border border-rose-200 bg-rose-50 p-6 text-rose-700">{error}</div> : null}
+      <div className="space-y-3">
+        {loading ? (
+          <div className="rounded-[2rem] border border-slate-200 bg-white p-6 text-slate-500 shadow-sm">Loading orders...</div>
+        ) : orders.length ? orders.map((order) => (
+          <Link key={order.id} to={`/account/orders/${order.id}`} className="block rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-brand-600">Order #{order.id}</p>
+                <p className="mt-1 text-lg font-bold text-slate-900">{order.status}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-sm text-slate-500">Total</p>
+                <p className="text-xl font-black text-slate-900">{formatCurrency(order.total)}</p>
+              </div>
+            </div>
+          </Link>
+        )) : (
+          <div className="rounded-[2rem] border border-slate-200 bg-white p-6 text-slate-500 shadow-sm">No orders yet.</div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function AccountOrderDetailPage() {
+  const { id } = useParams()
+  const [order, setOrder] = useState<any | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (!id) {
+      return
+    }
+
+    apiRequest<any>(`/orders/${id}`)
+      .then((result) => setOrder(result))
+      .catch((err) => setError(err instanceof Error ? err.message : 'Unable to load order details.'))
+      .finally(() => setLoading(false))
+  }, [id])
+
+  return (
+    <div className="space-y-6">
+      <PageShell title="Order details" description="View the product breakdown, status timeline, and payment summary for this order." />
+      {error ? <div className="rounded-[2rem] border border-rose-200 bg-rose-50 p-6 text-rose-700">{error}</div> : null}
+      {loading ? (
+        <div className="rounded-[2rem] border border-slate-200 bg-white p-6 text-slate-500 shadow-sm">Loading order…</div>
+      ) : !order ? (
+        <div className="rounded-[2rem] border border-slate-200 bg-white p-6 text-slate-500 shadow-sm">Order details are unavailable.</div>
+      ) : (
+        <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-brand-600">Order #{order.id}</p>
+              <h3 className="mt-1 text-2xl font-black text-slate-900">{order.status}</h3>
+            </div>
+            <div className="text-right">
+              <p className="text-sm text-slate-500">Total</p>
+              <p className="text-2xl font-black text-slate-900">{formatCurrency(order.total)}</p>
+            </div>
+          </div>
+
+          <div className="mt-6 grid gap-4 md:grid-cols-2">
+            {order.items?.map((item: any) => (
+              <div key={item.id} className="rounded-2xl bg-slate-50 p-4">
+                <p className="font-bold text-slate-900">{item.name}</p>
+                <p className="mt-2 text-sm text-slate-600">Qty: {item.quantity} • Price: {formatCurrency(item.price)}</p>
+              </div>
+            )) || <p className="text-slate-500">No items on this order.</p>}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 function AccountAddressesPage() { return <PageShell title="Addresses" description="Manage saved delivery addresses and your default shipping preferences." /> }
-function AccountWishlistPage() { return <PageShell title="Wishlist" description="Review the products you have saved for later purchase." /> }
 function AccountComparePage() { return <PageShell title="Compare" description="Compare products side-by-side before making a purchase decision." /> }
 function AccountReviewsPage() { return <PageShell title="Reviews" description="See your submitted reviews and feedback for past purchases." /> }
 function AccountQuestionsPage() { return <PageShell title="Questions" description="Review product questions and follow-ups you have created or answered." /> }
@@ -1350,36 +1431,123 @@ function FAQPage() {
 }
 
 function SupportPage() {
+  const navigate = useNavigate()
+  const { isAuthenticated } = useAuth()
+  const [startingSubject, setStartingSubject] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const quickOptions = [
+    'Order problem',
+    'Product question',
+    'Payment problem',
+    'Refund/return',
+    'Shipping',
+    'Account problem',
+    'Talk to seller',
+    'Talk to customer support',
+  ]
+
+  const handleStartSupport = async (type: string) => {
+    if (startingSubject) return
+    if (!isAuthenticated) {
+      navigate('/login')
+      return
+    }
+
+    setStartingSubject(type)
+    setError(null)
+    try {
+      const conversation = await createChatConversation({
+        type: 'CUSTOMER_SUPPORT',
+        subject: type,
+        priority: 'NORMAL',
+      })
+
+      navigate(`/account/messages/${conversation.id}`)
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Unable to create support conversation.')
+    } finally {
+      setStartingSubject(null)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <PageShell title="Support" description="Get help with orders, account access, payments, returns, and any issues while using Vendora." />
+      {error && <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700" role="alert">{error}</div>}
+
       <div className="grid gap-6 lg:grid-cols-3">
-        <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
-          <h3 className="text-xl font-black text-slate-900">Orders</h3>
-          <p className="mt-3 text-slate-600">Track order status, delivery updates, and cancellations.</p>
-        </div>
-        <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
-          <h3 className="text-xl font-black text-slate-900">Payments</h3>
-          <p className="mt-3 text-slate-600">Resolve failed payments, refunds, and charge issues.</p>
-        </div>
-        <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
-          <h3 className="text-xl font-black text-slate-900">Account</h3>
-          <p className="mt-3 text-slate-600">Recover passwords, update profile details, and review account activity.</p>
-        </div>
+        {quickOptions.map((option) => (
+          <button
+            key={option}
+            type="button"
+            disabled={Boolean(startingSubject)}
+            onClick={() => handleStartSupport(option)}
+            className="rounded-[2rem] border border-slate-200 bg-white p-6 text-left shadow-sm transition hover:border-brand-300 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <h3 className="text-xl font-black text-slate-900">{option}</h3>
+            <p className="mt-3 text-slate-600">{startingSubject === option ? 'Opening conversation...' : 'Start a real support conversation with the Vendora team.'}</p>
+          </button>
+        ))}
+      </div>
+
+      <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
+        <button
+          type="button"
+          disabled={Boolean(startingSubject)}
+          onClick={() => handleStartSupport('General support')}
+          className="rounded-full bg-[#1f2d4d] px-5 py-3 font-semibold text-white transition hover:bg-[#172544] disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {startingSubject === 'General support' ? 'Opening...' : 'Start conversation'}
+        </button>
       </div>
     </div>
   )
 }
 
 function CartPage() {
-  const [cart, setCart] = useState<any>(null)
+  const navigate = useNavigate()
+  const { user, isAuthenticated } = useAuth()
+  const items = useCartStore((state) => state.items)
+  const summary = useCartStore((state) => state.summary)
+  const loadForUser = useCartStore((state) => state.loadForUser)
+  const updateQuantity = useCartStore((state) => state.updateQuantity)
+  const removeItem = useCartStore((state) => state.removeItem)
+  const clear = useCartStore((state) => state.clear)
   const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [pendingAction, setPendingAction] = useState<string | null>(null)
 
   useEffect(() => {
-    apiRequest<any>('/cart/1')
-      .then((data) => setCart(data))
-      .catch((err) => setError(err.message))
-  }, [])
+    if (!user?.id) {
+      setLoading(false)
+      return
+    }
+
+    loadForUser(user.id)
+      .catch((err) => setError(err instanceof Error ? err.message : 'Unable to load cart.'))
+      .finally(() => setLoading(false))
+  }, [loadForUser, user?.id])
+
+  const subtotal = getCartSubtotal(items)
+  const shipping = summary?.shipping ?? (subtotal > 0 ? 12 : 0)
+  const tax = summary?.tax ?? subtotal * 0.08
+  const discount = summary?.discount ?? 0
+  const total = summary?.total ?? subtotal + shipping + tax - discount
+
+  const runCartMutation = async (action: string, mutation: () => Promise<unknown>) => {
+    if (pendingAction) return
+
+    setPendingAction(action)
+    setError(null)
+    try {
+      await mutation()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to update your cart.')
+    } finally {
+      setPendingAction(null)
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -1389,28 +1557,183 @@ function CartPage() {
       ) : null}
 
       <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
-        {!cart ? (
+        {!isAuthenticated && items.length === 0 ? (
+          <p className="text-slate-500">Your cart is empty.</p>
+        ) : loading ? (
           <p className="text-slate-500">Loading cart…</p>
-        ) : cart.items?.length ? (
+        ) : items.length ? (
           <>
             <div className="grid gap-4 md:grid-cols-2">
-              {cart.items.map((item: any) => (
-                <div key={item.productId} className="rounded-2xl bg-slate-50 p-5">
-                  <p className="text-lg font-bold text-slate-900">{item.name}</p>
-                  <p className="mt-2 text-slate-600">Qty: {item.quantity} • ${Number(item.price).toFixed(2)}</p>
+              {items.map((item) => (
+                <div key={item.id} className="rounded-2xl bg-slate-50 p-5">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex min-w-0 items-start gap-3">
+                      {item.imageUrl ? <img src={item.imageUrl} alt="" className="h-16 w-16 shrink-0 rounded-xl object-cover" /> : <div className="h-16 w-16 shrink-0 rounded-xl bg-slate-200" aria-hidden="true" />}
+                      <div>
+                      <p className="text-lg font-bold text-slate-900">{item.name}</p>
+                      <p className="mt-1 text-sm text-slate-500">{item.shop || 'Seller information unavailable'}</p>
+                      {item.variant && <p className="mt-1 text-sm text-slate-500">Variant: {item.variant}</p>}
+                      <p className="mt-2 text-slate-600">{formatCurrency(item.price)} each</p>
+                      </div>
+                    </div>
+                    <button type="button" disabled={Boolean(pendingAction)} onClick={() => void runCartMutation(`remove-${item.id}`, () => removeItem(item.id))} className="text-sm font-semibold text-rose-600 disabled:cursor-not-allowed disabled:opacity-50">{pendingAction === `remove-${item.id}` ? 'Removing...' : 'Remove'}</button>
+                  </div>
+                  <div className="mt-4 flex items-center gap-3">
+                    <button type="button" disabled={Boolean(pendingAction)} onClick={() => void runCartMutation(`decrease-${item.id}`, () => updateQuantity(item.id, item.quantity - 1))} className="h-9 w-9 rounded-full border border-slate-200 text-lg disabled:cursor-not-allowed disabled:opacity-50">−</button>
+                    <span className="min-w-10 text-center text-sm font-semibold text-slate-700">{item.quantity}</span>
+                    <button type="button" disabled={Boolean(pendingAction) || (item.stock !== undefined && item.quantity >= item.stock)} onClick={() => void runCartMutation(`increase-${item.id}`, () => updateQuantity(item.id, item.quantity + 1))} className="h-9 w-9 rounded-full border border-slate-200 text-lg disabled:cursor-not-allowed disabled:opacity-50">+</button>
+                  </div>
+                  {item.stock !== undefined && <p className="mt-2 text-xs text-slate-500">{item.stock} available</p>}
                 </div>
               ))}
             </div>
             <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
-              <div className="text-lg font-bold text-slate-900">Subtotal: ${Number(cart.subtotal || 0).toFixed(2)}</div>
-              <div className="text-lg font-bold text-slate-900">Total: ${Number(cart.total || 0).toFixed(2)}</div>
-              <button className="rounded-full bg-brand-600 px-5 py-3 font-semibold text-white">Proceed to checkout</button>
+              <div className="text-lg font-bold text-slate-900">Subtotal: {formatCurrency(subtotal)}</div>
+              <div className="text-lg font-bold text-slate-900">Shipping: {formatCurrency(shipping)}</div>
+              <div className="text-lg font-bold text-slate-900">Tax: {formatCurrency(tax)}</div>
+              {discount > 0 && <div className="text-lg font-bold text-emerald-600">Discount: -{formatCurrency(discount)}</div>}
+              <div className="text-lg font-bold text-slate-900">Total: {formatCurrency(total)}</div>
+            </div>
+            <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
+              <button type="button" disabled={Boolean(pendingAction)} onClick={() => void runCartMutation('clear', clear)} className="rounded-full border border-slate-200 px-5 py-3 font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50">{pendingAction === 'clear' ? 'Clearing...' : 'Clear cart'}</button>
+              <button type="button" onClick={() => navigate('/checkout')} className="rounded-full bg-brand-600 px-5 py-3 font-semibold text-white">Proceed to checkout</button>
             </div>
           </>
         ) : (
           <p className="text-slate-500">Your cart is empty.</p>
         )}
       </div>
+    </div>
+  )
+}
+
+function CheckoutPage() {
+  const navigate = useNavigate()
+  const { user, isAuthenticated } = useAuth()
+  const items = useCartStore((state) => state.items)
+  const checkout = useCartStore((state) => state.checkout)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [address, setAddress] = useState({
+    fullName: user?.name || '',
+    street: '',
+    city: '',
+    state: '',
+    zip: '',
+    country: '',
+  })
+
+  useEffect(() => {
+    if (!isAuthenticated && !user?.id) {
+      navigate('/login')
+    }
+  }, [isAuthenticated, navigate, user?.id])
+
+  useEffect(() => {
+    setAddress((current) => ({ ...current, fullName: current.fullName || user?.name || '' }))
+  }, [user?.name])
+
+  const subtotal = getCartSubtotal(items)
+  const shipping = subtotal > 0 ? 12 : 0
+  const tax = subtotal * 0.08
+  const total = subtotal + shipping + tax
+
+  const handleCheckout = async () => {
+    if (!user?.id) {
+      navigate('/login')
+      return
+    }
+
+    if (!items.length) {
+      setError('Your cart is empty.')
+      return
+    }
+
+    if (Object.values(address).some((value) => !value.trim())) {
+      setError('Complete every shipping address field before placing the order.')
+      return
+    }
+
+    setLoading(true)
+    setError(null)
+
+    try {
+      const result = await checkout(String(user.id), {
+        paymentMethod: 'stripe',
+        shippingAddress: address,
+      })
+
+      navigate(`/account/orders/${result.order.id}`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to complete checkout.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <PageShell title="Checkout" description="Review your order, shipping details, and secure payment before placing it." />
+
+      {error ? <div className="rounded-[2rem] border border-rose-200 bg-rose-50 p-6 text-rose-700">{error}</div> : null}
+
+      <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+        <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
+          <h3 className="text-xl font-black text-slate-900">Order summary</h3>
+          <div className="mt-5 space-y-4">
+            {items.map((item) => (
+              <div key={item.id} className="flex items-center justify-between border-b border-slate-200 pb-3 last:border-0 last:pb-0">
+                <div>
+                  <p className="font-semibold text-slate-900">{item.name}</p>
+                  <p className="text-sm text-slate-500">Qty: {item.quantity}</p>
+                </div>
+                <p className="font-bold text-slate-900">{formatCurrency(item.price * item.quantity)}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
+          <h3 className="text-xl font-black text-slate-900">Shipping and payment</h3>
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            {Object.entries(address).map(([field, value]) => (
+              <label key={field} className={field === 'street' ? 'sm:col-span-2' : ''}>
+                <span className="mb-1 block text-sm font-semibold capitalize text-slate-700">{field.replace(/([A-Z])/g, ' $1')}</span>
+                <input
+                  value={value}
+                  onChange={(event) => setAddress((current) => ({ ...current, [field]: event.target.value }))}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 outline-none focus:border-brand-500"
+                  autoComplete={field === 'fullName' ? 'name' : field === 'street' ? 'street-address' : field}
+                />
+              </label>
+            ))}
+          </div>
+          <div className="mt-5 space-y-3 text-slate-700">
+            <div className="flex justify-between"><span>Subtotal</span><span>{formatCurrency(subtotal)}</span></div>
+            <div className="flex justify-between"><span>Shipping</span><span>{formatCurrency(shipping)}</span></div>
+            <div className="flex justify-between"><span>Tax</span><span>{formatCurrency(tax)}</span></div>
+            <div className="flex justify-between border-t border-slate-200 pt-3 text-lg font-black text-slate-900"><span>Total</span><span>{formatCurrency(total)}</span></div>
+          </div>
+
+          <button type="button" onClick={handleCheckout} disabled={loading || !items.length} className="mt-6 w-full rounded-full bg-brand-600 px-5 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300">
+            {loading ? 'Placing order...' : 'Place order'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function SellerRegistrationRedirect() {
+  useEffect(() => {
+    window.location.assign(SELLER_REGISTRATION_URL)
+  }, [])
+
+  return (
+    <div className="mx-auto max-w-xl rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-sm">
+      <h1 className="text-2xl font-black text-slate-900">Opening seller registration</h1>
+      <p className="mt-3 text-slate-600">You are being redirected to the Vendora Seller Panel.</p>
+      <a href={SELLER_REGISTRATION_URL} className="mt-6 inline-flex rounded-xl bg-brand-600 px-5 py-3 font-semibold text-white">Continue to seller registration</a>
     </div>
   )
 }
@@ -1675,22 +1998,22 @@ function SellerDashboardPage() {
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-700">Application status</p>
             <h3 className="mt-2 text-2xl font-black text-slate-900">{dashboard ? 'Seller data is live from the API' : 'Shop application is under admin review'}</h3>
-            <p className="mt-2 text-sm text-slate-600">{dashboard ? `Revenue: $${Number(dashboard.revenue || 0).toFixed(2)} • Withdrawable: $${Number(dashboard.withdrawableBalance || 0).toFixed(2)}` : 'Your shop profile has been submitted and is awaiting approval before it becomes visible to shoppers.'}</p>
+            <p className="mt-2 text-sm text-slate-600">{dashboard ? `Revenue: ${formatCurrency(dashboard.revenue)} • Withdrawable: ${formatCurrency(dashboard.withdrawableBalance)}` : 'Your shop profile has been submitted and is awaiting approval before it becomes visible to shoppers.'}</p>
           </div>
           <div className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-amber-700 ring-1 ring-amber-200">{dashboard ? 'Connected' : 'Pending approval'}</div>
         </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Revenue" value={dashboard ? `$${Number(dashboard.revenue || 0).toFixed(2)}` : '$18.4k'} />
-        <StatCard label="Orders" value={dashboard ? String(dashboard.orders || 342) : '342'} />
-        <StatCard label="Products" value={dashboard ? String(dashboard.products || 1280) : '1,280'} />
-        <StatCard label="Customers" value={dashboard ? String(dashboard.visitors || 4860) : '4,860'} />
+        <StatCard label="Revenue" value={dashboard ? formatCurrency(dashboard.revenue) : '—'} />
+        <StatCard label="Orders" value={dashboard ? String(dashboard.orders || 0) : '—'} />
+        <StatCard label="Products" value={dashboard ? String(dashboard.products || 0) : '—'} />
+        <StatCard label="Customers" value={dashboard ? String(dashboard.visitors || 0) : '—'} />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Panel title="Quick actions" content="Create a product, review new orders, manage inventory, and launch discount campaigns for your storefront." />
-        <Panel title="Store health" content={dashboard ? `Net earnings: $${Number(dashboard.netEarnings || 0).toFixed(2)} • Commission: $${Number(dashboard.platformCommission || 0).toFixed(2)}` : 'Your shop is active, products are in stock, return rate is stable, and payout schedule is on track.'} />
+        <Panel title="Store health" content={dashboard ? `Net earnings: ${formatCurrency(dashboard.netEarnings)} • Commission: ${formatCurrency(dashboard.platformCommission)}` : 'Your shop is active, products are in stock, return rate is stable, and payout schedule is on track.'} />
       </div>
     </div>
   )
@@ -1783,7 +2106,7 @@ function SellerProductCreatePage() {
       fields: [
         { label: 'Meta title', type: 'text', placeholder: 'Smart Speaker Pro | Vendora' },
         { label: 'Meta description', type: 'textarea', placeholder: 'Premium wireless speaker with room-filling sound and smart voice assistant support.' },
-        { label: 'Slug', type: 'text', placeholder: 'smart-speaker-pro' },
+        { label: 'Slug', type: 'text', placeholder: 'product-slug' },
         { label: 'Keywords', type: 'text', placeholder: 'speaker, smart home, wireless audio' }
       ]
     },
@@ -1927,9 +2250,9 @@ function SellerEarningsPage() {
       {error ? <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-rose-700">{error}</div> : null}
       {earnings ? (
         <div className="grid gap-4 md:grid-cols-3">
-          <StatCard label="Gross sales" value={`$${Number(earnings.grossSales || 0).toFixed(2)}`} />
-          <StatCard label="Platform commission" value={`$${Number(earnings.platformCommission || 0).toFixed(2)}`} />
-          <StatCard label="Net earnings" value={`$${Number(earnings.netEarnings || 0).toFixed(2)}`} />
+          <StatCard label="Gross sales" value={formatCurrency(earnings.grossSales)} />
+          <StatCard label="Platform commission" value={formatCurrency(earnings.platformCommission)} />
+          <StatCard label="Net earnings" value={formatCurrency(earnings.netEarnings)} />
         </div>
       ) : (
         <p className="text-slate-500">Loading earnings…</p>
@@ -1979,12 +2302,12 @@ function AdminDashboardPage() {
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Users" value={summary ? String(summary.totalSellers || 0) : '24.8k'} />
         <StatCard label="Sellers" value={summary ? String(summary.activeSellers || 0) : '1.2k'} />
-        <StatCard label="Commission" value={summary ? `$${Number(summary.totalCommission || 0).toFixed(2)}` : '$382k'} />
+        <StatCard label="Commission" value={summary ? formatCurrency(summary.totalCommission) : '—'} />
         <StatCard label="Payouts" value={summary ? `${summary.pendingPayouts || 0}` : '0'} />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <Panel title="Marketplace activity" content={summary ? `Platform revenue: $${Number(summary.totalRevenue || 0).toFixed(2)} • Pending payout amount: $${Number(summary.pendingPayoutAmount || 0).toFixed(2)}` : 'New seller applications, inventory alerts, and payment settlements are ready for review.'} />
+        <Panel title="Marketplace activity" content={summary ? `Platform revenue: ${formatCurrency(summary.totalRevenue)} • Pending payout amount: ${formatCurrency(summary.pendingPayoutAmount)}` : 'New seller applications, inventory alerts, and payment settlements are ready for review.'} />
         <Panel title="Operations" content="Orders, refunds, reviews, and payouts are organized by status to support quick approvals." />
       </div>
     </div>
@@ -2180,7 +2503,7 @@ function AdminCommissionsPage() {
       {error ? <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-rose-700">{error}</div> : null}
       {summary ? (
         <div className="grid gap-4 md:grid-cols-2">
-          <StatCard label="Total commission" value={`$${Number(summary.totalCommission || 0).toFixed(2)}`} />
+          <StatCard label="Total commission" value={formatCurrency(summary.totalCommission)} />
           <StatCard label="Pending payouts" value={`${summary.pendingPayouts || 0}`} />
         </div>
       ) : (
@@ -2208,7 +2531,7 @@ function AdminPayoutsPage() {
         {payouts.length ? payouts.map((payout: any) => (
           <div key={payout.id} className="rounded-[2rem] border border-slate-200 bg-white p-4 shadow-sm">
             <p className="font-bold text-slate-900">Seller #{payout.sellerId}</p>
-            <p className="text-sm text-slate-600">Amount: ${Number(payout.amount || 0).toFixed(2)} • Status: {payout.status}</p>
+            <p className="text-sm text-slate-600">Amount: {formatCurrency(payout.amount)} • Status: {payout.status}</p>
           </div>
         )) : (
           <p className="text-slate-500">No payouts available yet.</p>
@@ -2245,15 +2568,6 @@ function NotFoundPage() {
   )
 }
 
-function StatCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <p className="text-sm text-slate-500">{label}</p>
-      <p className="mt-3 text-3xl font-black text-slate-900">{value}</p>
-    </div>
-  )
-}
-
 function FeatureCard({ title, text }: { title: string; text: string }) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -2282,6 +2596,418 @@ function PageShell({ title, description }: { title: string; description: string 
   )
 }
 
+function CustomerChatPage() {
+  const { user, isAuthenticated } = useAuth()
+  const [conversations, setConversations] = useState<ChatConversation[]>([])
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [draft, setDraft] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [sending, setSending] = useState(false)
+  const [error, setError] = useState('')
+  const [creatingConversation, setCreatingConversation] = useState(false)
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setLoading(false)
+      return
+    }
+
+    fetchChatConversations()
+      .then((items) => {
+        setConversations(items)
+        if (items.length > 0) {
+          setSelectedId(items[0].id)
+        }
+      })
+      .catch((err) => setError(err instanceof Error ? err.message : 'Unable to load conversations.'))
+      .finally(() => setLoading(false))
+  }, [isAuthenticated])
+
+  useEffect(() => {
+    if (!selectedId) {
+      setMessages([])
+      return
+    }
+
+    fetchChatMessages(selectedId, 1, 50)
+      .then((result) => setMessages(result.data))
+      .catch((err) => setError(err instanceof Error ? err.message : 'Unable to load messages.'))
+      .finally(() => {
+        markConversationRead(selectedId).catch(() => undefined)
+      })
+  }, [selectedId])
+
+  const selectedConversation = conversations.find((conversation) => conversation.id === selectedId) ?? null
+
+  const handleSendMessage = async () => {
+    if (!selectedId || !draft.trim() || sending) {
+      return
+    }
+
+    setSending(true)
+    setError('')
+
+    try {
+      const message = await sendChatMessage(selectedId, { type: 'TEXT', content: draft.trim() })
+      setMessages((current) => [...current, message])
+      setDraft('')
+
+      const refreshed = await fetchChatConversations()
+      setConversations(refreshed)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to send message.')
+    } finally {
+      setSending(false)
+    }
+  }
+
+  const startSupport = async () => {
+    if (creatingConversation) return
+    setCreatingConversation(true)
+    try {
+      const conversation = await createChatConversation({
+        type: 'CUSTOMER_SUPPORT',
+        subject: 'General support',
+        priority: 'NORMAL',
+      })
+
+      setConversations((current) => [conversation, ...current])
+      setSelectedId(conversation.id)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to create support conversation.')
+    } finally {
+      setCreatingConversation(false)
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <PageShell title="Messages" description="Track support conversations, seller replies, and account updates in one place." />
+
+      {!isAuthenticated ? (
+        <div className="rounded-[2rem] border border-slate-200 bg-white p-8 text-slate-700">
+          Please log in to access your messages.
+        </div>
+      ) : (
+        <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
+          <div className="rounded-[2rem] border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-lg font-bold text-slate-900">Conversations</h3>
+              <button
+                type="button"
+                onClick={startSupport}
+                disabled={creatingConversation}
+                className="rounded-full bg-[#1f2d4d] px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                {creatingConversation ? 'Opening...' : 'New'}
+              </button>
+            </div>
+
+            {loading ? (
+              <p className="text-sm text-slate-500">Loading conversations…</p>
+            ) : conversations.length === 0 ? (
+              <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
+                No conversations yet.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {conversations.map((conversation) => (
+                  <button
+                    key={conversation.id}
+                    type="button"
+                    onClick={() => setSelectedId(conversation.id)}
+                    className={`w-full rounded-2xl border p-3 text-left transition ${selectedId === conversation.id ? 'border-brand-300 bg-brand-50' : 'border-slate-200 bg-white hover:border-slate-300'}`}
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="font-semibold text-slate-900">{conversation.customer?.name || 'Customer'}</p>
+                      {conversation.unreadCount ? (
+                        <span className="rounded-full bg-red-500 px-2 py-0.5 text-xs font-bold text-white">{conversation.unreadCount}</span>
+                      ) : null}
+                    </div>
+                    <p className="mt-1 text-sm text-slate-600">{conversation.subject || conversation.type}</p>
+                    <p className="mt-2 text-xs text-slate-400">{conversation.lastMessageAt ? new Date(conversation.lastMessageAt).toLocaleString() : 'Just now'}</p>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-[2rem] border border-slate-200 bg-white shadow-sm">
+            {!selectedConversation ? (
+              <div className="flex h-full min-h-[420px] items-center justify-center p-8 text-slate-500">
+                Select a conversation to continue.
+              </div>
+            ) : (
+              <>
+                <div className="border-b border-slate-200 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <h3 className="text-lg font-bold text-slate-900">
+                        {selectedConversation.customer?.name || user?.name || 'Support conversation'}
+                      </h3>
+                      <p className="text-sm text-slate-500">{selectedConversation.subject || 'Customer support'}</p>
+                    </div>
+                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                      {selectedConversation.status || 'OPEN'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="min-h-[380px] space-y-3 p-4">
+                  {messages.length === 0 ? (
+                    <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">No messages yet. Start the conversation.</div>
+                  ) : (
+                    messages.map((message) => (
+                      <div key={message.id} className={`flex ${message.senderId === user?.id ? 'justify-end' : 'justify-start'}`}>
+                        <div className={`max-w-[75%] rounded-2xl px-4 py-2 ${message.senderId === user?.id ? 'bg-[#1f2d4d] text-white' : 'bg-slate-100 text-slate-800'}`}>
+                          <p className="text-sm">{message.content || '(attachment)'}</p>
+                          <p className={`mt-1 text-[10px] ${message.senderId === user?.id ? 'text-slate-200' : 'text-slate-500'}`}>
+                            {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </p>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                <div className="border-t border-slate-200 p-4">
+                  {error ? <div className="mb-3 rounded-xl border border-red-200 bg-red-50 p-2 text-sm text-red-700">{error}</div> : null}
+                  <div className="flex gap-3">
+                    <textarea
+                      value={draft}
+                      onChange={(event) => setDraft(event.target.value)}
+                      rows={3}
+                      placeholder="Type your message..."
+                      className="min-h-[80px] flex-1 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none transition focus:border-brand-500 focus:bg-white"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleSendMessage}
+                      disabled={sending || !draft.trim()}
+                      className="rounded-2xl bg-[#f39a3d] px-5 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+                    >
+                      {sending ? 'Sending...' : 'Send'}
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function CustomerMessagesPage() {
+  const { user, isAuthenticated } = useAuth()
+  const navigate = useNavigate()
+  const { conversationId } = useParams()
+  const [conversations, setConversations] = useState<ChatConversation[]>([])
+  const [selectedId, setSelectedId] = useState<string | null>(conversationId || null)
+  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [draft, setDraft] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [sending, setSending] = useState(false)
+  const [error, setError] = useState('')
+  const [messageLoading, setMessageLoading] = useState(false)
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setLoading(false)
+      return
+    }
+
+    fetchChatConversations()
+      .then((items) => {
+        setConversations(items)
+        if (!selectedId && items[0]) {
+          setSelectedId(items[0].id)
+          navigate(`/account/messages/${items[0].id}`, { replace: true })
+        }
+        if (selectedId) {
+          const target = items.find((conversation) => conversation.id === selectedId)
+          if (target) {
+            setSelectedId(target.id)
+          }
+        }
+      })
+      .catch((err) => setError(err instanceof Error ? err.message : 'Unable to load conversations.'))
+      .finally(() => setLoading(false))
+  }, [isAuthenticated, navigate, selectedId])
+
+  useEffect(() => {
+    if (!selectedId) {
+      setMessages([])
+      return
+    }
+
+    setMessageLoading(true)
+    fetchChatMessages(selectedId, 1, 50)
+      .then((result) => setMessages(result.data))
+      .catch((err) => setError(err instanceof Error ? err.message : 'Unable to load messages.'))
+      .finally(() => {
+        setMessageLoading(false)
+        markConversationRead(selectedId).catch(() => undefined)
+      })
+  }, [selectedId])
+
+  const selectedConversation = conversations.find((conversation) => conversation.id === selectedId) ?? null
+
+  const handleSendMessage = async () => {
+    if (!selectedId || !draft.trim() || sending) {
+      return
+    }
+
+    setSending(true)
+    setError('')
+
+    try {
+      const message = await sendChatMessage(selectedId, { type: 'TEXT', content: draft.trim() })
+      setMessages((current) => [...current, message])
+      setDraft('')
+      const refreshed = await fetchChatConversations()
+      setConversations(refreshed)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to send message.')
+    } finally {
+      setSending(false)
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <PageShell title="My messages" description="Review conversations, answer support requests, and keep in touch with sellers and the Vendora team." />
+
+      {!isAuthenticated ? (
+        <div className="rounded-[2rem] border border-slate-200 bg-white p-8 text-slate-700">Please log in to access your messages.</div>
+      ) : (
+        <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
+          <div className="rounded-[2rem] border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-lg font-bold text-slate-900">Conversations</h3>
+              <button
+                type="button"
+                onClick={() => navigate('/support/chat')}
+                className="rounded-full bg-[#1f2d4d] px-3 py-1.5 text-sm font-semibold text-white"
+              >
+                New
+              </button>
+            </div>
+
+            {loading ? (
+              <p className="text-sm text-slate-500">Loading…</p>
+            ) : conversations.length === 0 ? (
+              <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">No conversations yet.</div>
+            ) : (
+              conversations.map((conversation) => (
+                <button
+                  key={conversation.id}
+                  type="button"
+                  onClick={() => {
+                    setSelectedId(conversation.id)
+                    navigate(`/account/messages/${conversation.id}`)
+                  }}
+                  className={`mb-3 block w-full rounded-2xl border p-3 text-left transition ${selectedId === conversation.id ? 'border-brand-300 bg-brand-50' : 'border-slate-200 bg-white hover:border-slate-300'}`}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="font-semibold text-slate-900">{conversation.customer?.name || 'Customer'}</p>
+                    {conversation.unreadCount ? (
+                      <span className="rounded-full bg-red-500 px-2 py-0.5 text-xs font-bold text-white">{conversation.unreadCount}</span>
+                    ) : null}
+                  </div>
+                    <p className="mt-1 text-sm text-slate-600">Vendora support · {conversation.subject || conversation.type}</p>
+                </button>
+              ))
+            )}
+          </div>
+
+          <div className="rounded-[2rem] border border-slate-200 bg-white shadow-sm">
+            {!selectedConversation ? (
+              <div className="flex min-h-[420px] items-center justify-center p-8 text-slate-500">Select a conversation.</div>
+            ) : (
+              <>
+                <div className="border-b border-slate-200 p-4">
+                  <h3 className="text-lg font-bold text-slate-900">{selectedConversation.subject || 'Support conversation'}</h3>
+                  <p className="text-sm text-slate-500">{selectedConversation.type}</p>
+                </div>
+
+                <div className="min-h-[360px] space-y-3 p-4">
+                  {messageLoading ? (
+                    <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">Loading messages...</div>
+                  ) : messages.length === 0 ? (
+                    <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">No messages.</div>
+                  ) : (
+                    messages.map((message) => (
+                      <div key={message.id} className={`flex ${message.senderId === user?.id ? 'justify-end' : 'justify-start'}`}>
+                        <div className={`max-w-[75%] rounded-2xl px-4 py-2 ${message.senderId === user?.id ? 'bg-[#1f2d4d] text-white' : 'bg-slate-100 text-slate-800'}`}>
+                          <p className={`mb-1 text-[10px] font-bold uppercase tracking-[0.14em] ${message.senderId === user?.id ? 'text-orange-200' : 'text-brand-600'}`}>{message.senderId === user?.id ? 'Customer message' : `${message.senderRole === 'SELLER' ? 'Seller' : 'Vendora support'} message`}</p>
+                          <p className="text-sm">{message.content || '(attachment)'}</p>
+                          <p className={`mt-1 text-[10px] ${message.senderId === user?.id ? 'text-slate-200' : 'text-slate-500'}`}>
+                            {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </p>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                <div className="border-t border-slate-200 p-4">
+                  {error ? <div className="mb-3 flex items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 p-2 text-sm text-red-700"><span>{error}</span><button type="button" onClick={handleSendMessage} disabled={!draft.trim() || sending} className="font-semibold underline disabled:opacity-50">Retry</button></div> : null}
+                  <div className="flex gap-3">
+                    <textarea
+                      value={draft}
+                      onChange={(event) => setDraft(event.target.value)}
+                      rows={3}
+                      placeholder="Reply..."
+                      className="min-h-[80px] flex-1 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none transition focus:border-brand-500 focus:bg-white"
+                    />
+                    <button
+                      type="button"
+                      disabled={sending || !draft.trim()}
+                      onClick={handleSendMessage}
+                      className="rounded-2xl bg-[#f39a3d] px-5 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+                    >
+                      {sending ? 'Sending...' : 'Send'}
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function FloatingSupportButton() {
+  const navigate = useNavigate()
+  const { isAuthenticated } = useAuth()
+  const [unreadCount, setUnreadCount] = useState(0)
+
+  useEffect(() => {
+    if (!isAuthenticated) return
+    let active = true
+    const load = () => fetchChatConversations().then((items) => { if (active) setUnreadCount(items.reduce((total, item) => total + Number(item.unreadCount || 0), 0)) }).catch(() => undefined)
+    load()
+    const interval = window.setInterval(load, 30000)
+    return () => { active = false; window.clearInterval(interval) }
+  }, [isAuthenticated])
+
+  return (
+    <button
+      type="button"
+      onClick={() => navigate(isAuthenticated ? '/account/messages' : '/support/chat')}
+      className="fixed bottom-6 right-6 z-50 inline-flex items-center gap-3 rounded-full bg-[#1f2d4d] px-5 py-3 text-sm font-semibold text-white shadow-[0_20px_45px_rgba(31,45,77,0.35)] transition hover:-translate-y-0.5 hover:bg-[#162440]"
+    >
+      <span className="relative flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-lg">💬{unreadCount > 0 && <span className="absolute -right-2 -top-2 flex h-5 min-w-5 items-center justify-center rounded-full bg-orange-400 px-1 text-[10px] font-bold text-white">{unreadCount}</span>}</span>
+      {isAuthenticated ? 'Open messages' : 'Need help?'}
+    </button>
+  )
+}
+
 function NavCard({ title, to }: { title: string; to: string }) {
   return (
     <Link to={to} className="block rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition hover:border-brand-300 hover:shadow-md">
@@ -2296,12 +3022,14 @@ function Field({
   placeholder,
   value,
   type = 'text',
+  autoComplete,
   onChange,
 }: {
   label: string
   placeholder: string
   value?: string
   type?: string
+  autoComplete?: string
   onChange?: (value: string) => void
 }) {
   return (
@@ -2309,6 +3037,7 @@ function Field({
       <span className="mb-2 block text-sm font-medium text-slate-700">{label}</span>
       <input
         type={type}
+        autoComplete={autoComplete}
         value={value ?? ''}
         onChange={(event) => onChange?.(event.target.value)}
         placeholder={placeholder}

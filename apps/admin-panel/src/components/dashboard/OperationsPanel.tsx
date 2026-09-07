@@ -1,9 +1,11 @@
+import { Link } from 'react-router-dom'
+
 export function OperationsPanel() {
   return (
     <div className="rounded-[28px] bg-white p-5 shadow-sm ring-1 ring-slate-200">
       <div className="mb-4 flex items-center justify-between">
         <h3 className="text-xl font-semibold text-slate-900">Operations</h3>
-        <button className="text-sm font-medium text-sky-600">Manage</button>
+        <Link to="/admin/product-warehouse" className="text-sm font-medium text-sky-600">Manage</Link>
       </div>
 
       <div className="space-y-3">

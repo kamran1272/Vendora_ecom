@@ -3,14 +3,31 @@ import { api } from './api'
 export type WarehouseProduct = {
   id: string
   name: string
+  slug?: string
+  description?: string | null
+  shortDescription?: string | null
   sku: string
   barcode?: string | null
   images: string[]
+  thumbnail?: string | null
   category?: string | null
+  subcategory?: string | null
   brand?: string | null
   basePrice: number
+  salePrice?: number | null
   sellerMargin: number
   stock: number
+  minimumOrder?: number
+  maximumOrder?: number
+  weight?: number | null
+  dimensions?: string | null
+  shippingInformation?: string | null
+  attributes?: Array<{ name: string; value: string }>
+  variants?: Array<{ name: string; options: string[] }>
+  discount?: number
+  sales?: number
+  rating?: number
+  createdAt?: string
   status: string
 }
 
@@ -47,7 +64,12 @@ export async function getSellerProducts() {
   return data
 }
 
+export async function bulkUpdateSellerProducts(payload: { ids: string[]; action: 'activate' | 'deactivate' | 'delete' | 'stock'; stock?: number }) {
+  const { data } = await api.post('/seller/products/bulk', payload)
+  return data as { success: boolean; updated: number }
+}
+
 export async function addWarehouseProducts(productIds: string[]) {
   const { data } = await api.post('/seller/product-warehouse/add', { productIds })
-  return data as { success: boolean; code?: string; message?: string; addedCount?: number; currentCount?: number; productLimit?: number; requestedCount?: number; remainingSlots?: number }
+  return data as { success: boolean; code?: string; message?: string; addedCount?: number; replacedCount?: number; currentCount?: number; productLimit?: number; requestedCount?: number; remainingSlots?: number }
 }

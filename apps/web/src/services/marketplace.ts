@@ -1,3 +1,5 @@
+import { apiRequest } from '@/services/api'
+
 export type MarketplaceProduct = {
   id: string
   name: string
@@ -18,18 +20,6 @@ export type MarketplaceProduct = {
   stock?: number
 }
 
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) || 'http://127.0.0.1:4003/api'
-
-async function apiRequest<T>(path: string): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path.startsWith('/') ? path : `/${path}`}`)
-
-  if (!response.ok) {
-    throw new Error(`Marketplace request failed: ${response.status}`)
-  }
-
-  return (await response.json()) as T
-}
-
 export async function fetchMarketplaceProducts(params: Record<string, string | number | undefined> = {}) {
   const query = new URLSearchParams()
 
@@ -40,7 +30,9 @@ export async function fetchMarketplaceProducts(params: Record<string, string | n
   })
 
   const suffix = query.size ? `?${query.toString()}` : ''
-  return apiRequest<{ items: MarketplaceProduct[]; total: number; page: number; limit: number; totalPages: number }>(`/public/products${suffix}`)
+  const response = await apiRequest<{ items: MarketplaceProduct[]; total: number; page: number; limit: number; totalPages: number }>(`/public/products${suffix}`)
+  const uniqueItems = [...new Map(response.items.map((item) => [item.id, item])).values()]
+  return { ...response, items: uniqueItems }
 }
 
 export async function fetchMarketplaceProduct(id: string) {

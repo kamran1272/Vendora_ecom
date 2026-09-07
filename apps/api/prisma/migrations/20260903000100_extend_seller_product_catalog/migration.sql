@@ -1,0 +1,12 @@
+ALTER TABLE "warehouse_products" ADD COLUMN "slug" TEXT NOT NULL DEFAULT '';
+ALTER TABLE "warehouse_products" ADD COLUMN "shortDescription" TEXT;
+ALTER TABLE "warehouse_products" ADD COLUMN "thumbnail" TEXT;
+ALTER TABLE "warehouse_products" ADD COLUMN "subcategory" TEXT;
+ALTER TABLE "warehouse_products" ADD COLUMN "salePrice" REAL;
+ALTER TABLE "warehouse_products" ADD COLUMN "minimumOrder" INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE "warehouse_products" ADD COLUMN "maximumOrder" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "warehouse_products" ADD COLUMN "weight" REAL;
+ALTER TABLE "warehouse_products" ADD COLUMN "dimensions" TEXT;
+ALTER TABLE "warehouse_products" ADD COLUMN "shippingInformation" TEXT;
+ALTER TABLE "warehouse_products" ADD COLUMN "attributes" TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE "warehouse_products" ADD COLUMN "variants" TEXT NOT NULL DEFAULT '[]';

@@ -44,9 +44,28 @@ export function ProductWarehouse() {
   }, [page, search, category, brand, stockStatus, sort])
 
   const selectedIds = useMemo(() => new Set(selected.map((product) => product.id)), [selected])
+
+  const ensureUniqueProducts = (items: WarehouseProduct[]) => {
+    const next = new Map<string, WarehouseProduct>()
+
+    items.forEach((item) => {
+      if (next.has(item.id)) {
+        next.delete(item.id)
+      }
+      next.set(item.id, item)
+    })
+
+    return [...next.values()]
+  }
+
   const toggleProduct = (product: WarehouseProduct) => {
     if (product.stock <= 0) return
-    setSelected((current) => selectedIds.has(product.id) ? current.filter((item) => item.id !== product.id) : [...current, product])
+    setSelected((current) => {
+      if (current.some((item) => item.id === product.id)) {
+        return current.filter((item) => item.id !== product.id)
+      }
+      return ensureUniqueProducts([...current, product])
+    })
   }
 
   const submit = async () => {
@@ -74,7 +93,10 @@ export function ProductWarehouse() {
     }
   }
 
-  const addAll = () => setSelected((current) => [...current, ...products.filter((product) => product.stock > 0 && !selectedIds.has(product.id))])
+  const addAll = () => setSelected((current) => ensureUniqueProducts([
+    ...current,
+    ...products.filter((product) => product.stock > 0 && !selectedIds.has(product.id)),
+  ]))
   const usage = state?.plan.productLimit && state.plan.productLimit > 0 ? Math.min(100, (state.currentCount / state.plan.productLimit) * 100) : 0
 
   return (

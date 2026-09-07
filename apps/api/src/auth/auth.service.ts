@@ -34,7 +34,7 @@ export class AuthService {
     const accessToken = this.jwtService.sign(payload, { expiresIn: '15m' });
     const refreshToken = this.jwtService.sign(
       { ...payload, type: 'refresh' },
-      { expiresIn: '7d' },
+      { expiresIn: '30d' },
     );
 
     return {
@@ -290,7 +290,48 @@ export class AuthService {
       throw new BadRequestException('User not found.');
     }
 
-    return { message: 'Address management is handled through the profile service.' };
+    const data = this.validateAddress(address);
+    const existing = data.id
+      ? await this.prisma.address.findFirst({ where: { id: String(data.id), userId: String(userId) } })
+      : null;
+
+    if (data.isDefault) {
+      await this.prisma.address.updateMany({ where: { userId: String(userId), ...(existing ? { id: { not: existing.id } } : {}) }, data: { isDefault: false } });
+    }
+
+    if (existing) {
+      const { id: _id, ...updateData } = data;
+      return this.prisma.address.update({ where: { id: existing.id }, data: updateData });
+    }
+
+    const hasAddress = await this.prisma.address.count({ where: { userId: String(userId) } });
+    return this.prisma.address.create({ data: { ...data, userId: String(userId), isDefault: hasAddress === 0 || data.isDefault } });
+  }
+
+  async getAddresses(userId: number | string) {
+    return this.prisma.address.findMany({ where: { userId: String(userId) }, orderBy: [{ isDefault: 'desc' }, { createdAt: 'desc' }] });
+  }
+
+  async deleteAddress(userId: number | string, addressId: string) {
+    const address = await this.prisma.address.findFirst({ where: { id: addressId, userId: String(userId) } });
+    if (!address) throw new BadRequestException('Address not found.');
+    await this.prisma.address.delete({ where: { id: address.id } });
+    if (address.isDefault) {
+      const replacement = await this.prisma.address.findFirst({ where: { userId: String(userId) }, orderBy: { createdAt: 'desc' } });
+      if (replacement) await this.prisma.address.update({ where: { id: replacement.id }, data: { isDefault: true } });
+    }
+    return { message: 'Address deleted.' };
+  }
+
+  private validateAddress(address: any) {
+    const required = ['fullName', 'addressLine1', 'city', 'state', 'postalCode', 'country'];
+    for (const field of required) if (!String(address?.[field] || '').trim()) throw new BadRequestException(`${field} is required.`);
+    return {
+      id: address?.id ? String(address.id) : undefined,
+      fullName: String(address.fullName).trim(), phone: address.phone ? String(address.phone).trim() : null,
+      addressLine1: String(address.addressLine1).trim(), addressLine2: address.addressLine2 ? String(address.addressLine2).trim() : null,
+      city: String(address.city).trim(), state: String(address.state).trim(), postalCode: String(address.postalCode).trim(), country: String(address.country).trim(), isDefault: Boolean(address.isDefault),
+    };
   }
 
   async getOrders(userId: number | string) {
@@ -316,11 +357,12 @@ export class AuthService {
       where: { id: user.id },
       data: { role: UserRole.SELLER },
     });
-    user.shopStatus = 'pending';
-    user.shopName = shopName;
+    const applicant = user as any;
+    applicant.shopStatus = 'pending';
+    applicant.shopName = shopName;
     return {
       message: 'Seller application submitted for admin approval.',
-      user: this.sanitizeUser(user),
+      user: this.sanitizeUser(applicant),
     };
   }
 

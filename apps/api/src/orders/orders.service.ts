@@ -1,12 +1,14 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { CartService } from '../cart/cart.service';
 import { PrismaService } from '../database/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class OrdersService {
   constructor(
     private readonly cartService: CartService,
     private readonly prisma: PrismaService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   findAll() {
@@ -50,6 +52,24 @@ export class OrdersService {
       },
       orderBy: { createdAt: 'desc' },
     });
+  }
+
+  async findUserOrder(userId: number | string, id: string) {
+    const order = await this.prisma.order.findFirst({
+      where: { id: String(id), userId: String(userId) },
+      include: {
+        items: true,
+        payment: true,
+        shipment: true,
+        statusHistory: true,
+      },
+    });
+
+    if (!order) {
+      throw new BadRequestException('Order not found.');
+    }
+
+    return order;
   }
 
   async checkout(userId: number | string, checkoutData: any) {
@@ -176,6 +196,7 @@ export class OrdersService {
       },
     });
 
+    await this.notificationsService.notifyAdmins({ type: 'NEW_ORDER', title: 'New order received', message: `Order ${newOrder.id} was placed for $${Number(newOrder.total).toFixed(2)}.`, entityId: newOrder.id, entityType: 'ORDER' });
     return newOrder;
   }
 

@@ -1,18 +1,15 @@
 import { Injectable } from '@nestjs/common';
+import { PrismaService } from '@/database/prisma.service';
 
 @Injectable()
 export class CategoriesService {
-  private categories = [
-    { id: 1, name: 'Electronics', slug: 'electronics', icon: '📱' },
-    { id: 2, name: 'Smart Home', slug: 'smart-home', icon: '🏠' },
-    { id: 3, name: 'Kitchen', slug: 'kitchen', icon: '🍳' },
-  ];
+  constructor(private readonly prisma: PrismaService) {}
 
   findAll() {
-    return this.categories;
+    return this.prisma.category.findMany({ orderBy: { sortOrder: 'asc' } });
   }
 
-  findOne(id: number) {
-    return this.categories.find((c) => c.id === id);
+  findOne(id: string) {
+    return this.prisma.category.findUnique({ where: { id } });
   }
 }

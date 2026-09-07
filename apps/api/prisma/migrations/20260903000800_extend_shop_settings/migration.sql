@@ -1,0 +1,17 @@
+ALTER TABLE "shops" ADD COLUMN "contactEmail" TEXT;
+ALTER TABLE "shops" ADD COLUMN "contactPhone" TEXT;
+ALTER TABLE "shops" ADD COLUMN "country" TEXT;
+ALTER TABLE "shops" ADD COLUMN "state" TEXT;
+ALTER TABLE "shops" ADD COLUMN "city" TEXT;
+ALTER TABLE "shops" ADD COLUMN "address" TEXT;
+ALTER TABLE "shops" ADD COLUMN "postalCode" TEXT;
+ALTER TABLE "shops" ADD COLUMN "facebook" TEXT;
+ALTER TABLE "shops" ADD COLUMN "instagram" TEXT;
+ALTER TABLE "shops" ADD COLUMN "tiktok" TEXT;
+ALTER TABLE "shops" ADD COLUMN "youtube" TEXT;
+ALTER TABLE "shops" ADD COLUMN "businessInformation" TEXT;
+ALTER TABLE "shops" ADD COLUMN "returnPolicy" TEXT;
+ALTER TABLE "shops" ADD COLUMN "shippingPolicy" TEXT;
+ALTER TABLE "shops" ADD COLUMN "metaTitle" TEXT;
+ALTER TABLE "shops" ADD COLUMN "metaDescription" TEXT;
+ALTER TABLE "shops" ADD COLUMN "keywords" TEXT;
