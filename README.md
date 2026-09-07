@@ -132,3 +132,13 @@ Build scripts generate Prisma clients and deploy migrations as part of the API b
 - Do not commit `.env` files, database journals, build output, dependency folders, or runtime logs.
 - Treat Prisma schema and migrations as the database source of truth.
 - Preserve the Seller -> Shop -> SellerProduct -> WarehouseProduct relationship when changing catalog flows.
+
+## Development guidelines
+
+- Preserve the existing separation between `apps/web`, `apps/seller-panel`, `apps/admin-panel`, `apps/api`, and `packages/shared`.
+- Keep frontend features modular across routes, layouts, pages, components, services, types, and configuration.
+- Keep NestJS modules, API bootstrap, configuration, and database integration intact.
+- Prefer typed contracts and centralized services over inline mock data.
+- Make small production-style changes and validate the relevant build or type-check command.
+- Keep local Vite apps runnable and avoid destructive database or migration changes.
+- Do not add unrelated scaffolding, placeholder architecture, credentials, generated output, or runtime logs.
