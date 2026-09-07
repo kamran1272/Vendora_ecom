@@ -269,7 +269,7 @@ export function AdminSupportCenterPage() {
   return (
     <AdminLayout>
     <div className="support-page space-y-6 p-1 text-slate-800 sm:p-2 lg:p-3">
-      <div className="support-workspace mx-auto max-w-[1500px] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm lg:flex lg:h-[calc(100vh-9.5rem)] lg:min-h-[640px] lg:flex-col">
+      <div className="support-workspace mx-auto max-w-[1500px] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm 2xl:flex 2xl:h-[calc(100vh-9.5rem)] 2xl:min-h-[640px] 2xl:flex-col">
         <div className="support-header border-b border-slate-200 px-6 py-4">
           <div className="flex items-center justify-between gap-4">
             <div>
@@ -295,7 +295,7 @@ export function AdminSupportCenterPage() {
           </div>
         </div>
 
-        <div className={`support-grid grid min-h-[620px] gap-0 lg:min-h-0 lg:flex-1 ${selectedConversation ? 'lg:grid-cols-[300px_minmax(0,1fr)_260px]' : 'lg:grid-cols-[330px_minmax(0,1fr)]'}`}>
+        <div className={`support-grid grid min-h-[620px] gap-0 2xl:min-h-0 2xl:flex-1 ${selectedConversation ? 'lg:grid-cols-[280px_minmax(0,1fr)] 2xl:grid-cols-[300px_minmax(0,1fr)_260px]' : 'lg:grid-cols-[300px_minmax(0,1fr)]'}`}>
           <aside className={`support-queue ${selectedConversation ? 'hidden lg:block' : 'block'} border-r border-slate-200 bg-slate-50 p-4`}>
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-lg font-bold text-slate-900">Queue</h2>
@@ -435,7 +435,7 @@ export function AdminSupportCenterPage() {
           </section>
 
           {selectedConversation ? (
-            <aside className="support-context hidden min-h-0 overflow-y-auto border-l border-slate-200 bg-white p-4 lg:block">
+            <aside className="support-context hidden min-h-0 overflow-y-auto border-l border-slate-200 bg-white p-4 2xl:block">
               <div className="mb-4 flex items-center gap-2"><span className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-50 text-sm font-bold text-indigo-700">{getConversationName(selectedConversation).slice(0, 1).toUpperCase()}</span><div className="min-w-0"><h2 className="truncate text-sm font-bold text-slate-900">{getConversationName(selectedConversation)}</h2><p className="text-xs text-slate-500">{getConversationRole(selectedConversation)}</p></div></div>
               <details open className="group space-y-3 text-sm">
                 <summary className="mb-3 flex cursor-pointer list-none items-center justify-between rounded-xl bg-slate-50 p-3 text-xs font-bold uppercase tracking-[0.14em] text-slate-500 [&::-webkit-details-marker]:hidden">Conversation details <ChevronDown size={15} className="transition-transform group-open:rotate-180" /></summary>
