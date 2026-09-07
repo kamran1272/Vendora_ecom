@@ -29,6 +29,8 @@ jobs:
         run: npm ci
       - name: Install Linux Rollup binary
         run: npm install --no-save --package-lock=false @rollup/rollup-linux-x64-gnu@4.63.1
+      - name: Build shared package
+        run: npm run build --workspace @vendora/shared
       - name: Build storefront
         run: npm run build --workspace @vendora/web
       - name: Configure Pages
