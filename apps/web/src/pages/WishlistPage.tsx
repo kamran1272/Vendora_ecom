@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { PageShell } from '@/components/common/PageShell'
 import { Link } from 'react-router-dom'
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/FeedbackState'
@@ -19,7 +19,7 @@ export function WishlistPage() {
   const [reloadKey, setReloadKey] = useState(0)
   const showToast = useToastStore((state) => state.show)
 
-  const uniqueIds = [...new Set(ids)]
+  const uniqueIds = useMemo(() => [...new Set(ids)], [ids])
 
   useEffect(() => {
     let active = true
@@ -45,7 +45,7 @@ export function WishlistPage() {
       })
 
     return () => { active = false }
-  }, [ids, reloadKey])
+  }, [uniqueIds, reloadKey])
 
   const removeProduct = (id: string, announce = true) => {
     toggleWishlist(id)

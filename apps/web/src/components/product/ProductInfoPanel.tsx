@@ -41,11 +41,9 @@ type ProductInfoPanelProps = {
 export function ProductInfoPanel({ product, onAddToCart, onBuyNow, wishlistId }: ProductInfoPanelProps) {
   const discountPercent = product.discountPercent ?? Math.max(0, Math.round(((product.oldPrice ?? product.price) - product.price) / (product.oldPrice ?? product.price) * 100))
 
-  const variantGroups = product.variantGroups ?? []
-
   const defaultSelection = useMemo(
-    () => Object.fromEntries(variantGroups.map((group) => [group.name, group.values[0]])),
-    [variantGroups]
+    () => Object.fromEntries((product.variantGroups ?? []).map((group) => [group.name, group.values[0]])),
+    [product.variantGroups]
   )
 
   const [selected, setSelected] = useState<Record<string, string>>(defaultSelection)

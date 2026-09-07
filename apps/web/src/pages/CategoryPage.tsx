@@ -53,7 +53,7 @@ export function CategoryPage() {
 
   const allProducts = useMemo(
     () => apiProducts,
-    [apiProducts, categoryInfo.name]
+    [apiProducts]
   )
 
   const getParamValue = (key: string, fallback: string) => searchParams.get(key) ?? fallback

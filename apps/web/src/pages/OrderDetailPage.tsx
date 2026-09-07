@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { PageShell } from '@/components/common/PageShell'
 import { ErrorState, LoadingState } from '@/components/ui/FeedbackState'
@@ -22,7 +22,7 @@ export function OrderDetailPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const loadOrder = () => {
+  const loadOrder = useCallback(() => {
     if (!id) return
     setLoading(true)
     setError(null)
@@ -30,11 +30,11 @@ export function OrderDetailPage() {
       .then(setOrder)
       .catch((requestError) => setError(requestError instanceof Error ? requestError.message : 'Unable to load order details.'))
       .finally(() => setLoading(false))
-  }
+  }, [id])
 
   useEffect(() => {
     loadOrder()
-  }, [id])
+  }, [loadOrder])
 
   const address = parseAddress(order?.shippingAddress)
 

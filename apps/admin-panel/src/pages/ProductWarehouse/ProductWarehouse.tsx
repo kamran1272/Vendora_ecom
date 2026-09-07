@@ -419,7 +419,7 @@ export function ProductWarehouse() {
 																	<Trash2 size={14} /> Delete
 														</button>
 														</div>
-													<div className="grid gap-3 md:hidden">
+													<div className="hidden">
 														{products.map((product) => <article key={product.id} className="rounded-2xl border border-slate-200 p-4 shadow-sm"><div className="flex gap-3"><span className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-100 text-slate-400">{product.images?.[0] ? <img src={product.images[0]} alt="" className="h-full w-full object-cover" loading="lazy" /> : <ImageOff size={18} />}</span><div className="min-w-0"><h3 className="line-clamp-2 font-semibold text-slate-900">{product.name}</h3><p className="mt-1 text-xs text-slate-500">{product.sku} · {product.sourceId || 'manual'}</p><span className={`mt-2 inline-flex rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-wider ${product.status === 'PUBLISHED' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>{product.status}</span></div></div><dl className="mt-4 grid grid-cols-2 gap-3 text-xs"><div><dt className="text-slate-500">Price</dt><dd className="font-semibold text-slate-800">${Number(product.basePrice ?? 0).toFixed(2)}</dd></div><div><dt className="text-slate-500">Stock</dt><dd className="font-semibold text-slate-800">{product.stock}</dd></div><div><dt className="text-slate-500">Category</dt><dd className="truncate font-semibold text-slate-800">{product.category || '—'}</dd></div><div><dt className="text-slate-500">Imported</dt><dd className="font-semibold text-slate-800">{product.importedAt ? new Date(product.importedAt).toLocaleDateString() : '—'}</dd></div></dl><div className="mt-4 flex flex-wrap gap-2"><button type="button" onClick={() => setPreviewProduct(product)} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700"><Eye size={14} /> Preview</button><button type="button" onClick={() => setEditingProduct(product)} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700"><Pencil size={14} /> Edit</button>{product.sourceId && product.externalProductId && product.sourceId !== 'manual' ? <button type="button" onClick={() => void resync(product)} className="inline-flex items-center gap-1 rounded-lg border border-sky-200 bg-sky-50 px-2.5 py-1.5 text-xs font-semibold text-sky-700"><RefreshCw size={14} /> Re-sync</button> : null}<button type="button" onClick={() => void toggle(product)} className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700">{product.status === 'PUBLISHED' ? 'Deactivate' : 'Activate'}</button></div></article>)}
 													</div>
 												</td>
@@ -434,6 +434,18 @@ export function ProductWarehouse() {
 									)}
 								</tbody>
 							</table>
+						</div>}
+						<div className="grid gap-3 p-4 md:hidden">
+							{products.map((product) => (
+								<article key={`mobile-${product.id}`} className="rounded-2xl border border-slate-200 p-4 shadow-sm">
+									<div className="flex gap-3">
+										<span className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-100 text-slate-400">{product.images?.[0] ? <img src={product.images[0]} alt="" className="h-full w-full object-cover" loading="lazy" /> : <ImageOff size={18} />}</span>
+										<div className="min-w-0"><h3 className="line-clamp-2 font-semibold text-slate-900">{product.name}</h3><p className="mt-1 text-xs text-slate-500">{product.sku} · {product.sourceId || 'manual'}</p><span className={`mt-2 inline-flex rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-wider ${product.status === 'PUBLISHED' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>{product.status}</span></div>
+									</div>
+									<div className="mt-4 grid grid-cols-2 gap-3 text-xs"><div><span className="text-slate-500">Price</span><p className="font-semibold text-slate-800">${Number(product.basePrice ?? 0).toFixed(2)}</p></div><div><span className="text-slate-500">Stock</span><p className="font-semibold text-slate-800">{product.stock}</p></div><div><span className="text-slate-500">Category</span><p className="truncate font-semibold text-slate-800">{product.category || '—'}</p></div><div><span className="text-slate-500">Imported</span><p className="font-semibold text-slate-800">{product.importedAt ? new Date(product.importedAt).toLocaleDateString() : '—'}</p></div></div>
+									<div className="mt-4 flex flex-wrap gap-2"><button type="button" onClick={() => setPreviewProduct(product)} className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700">Preview</button><button type="button" onClick={() => setEditingProduct(product)} className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700">Edit</button><button type="button" onClick={() => void toggle(product)} className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700">{product.status === 'PUBLISHED' ? 'Deactivate' : 'Activate'}</button></div>
+								</article>
+							))}
 						</div>
 					</section>
 				</div>
