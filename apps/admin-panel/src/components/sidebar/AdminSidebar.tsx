@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { NavLink } from 'react-router-dom'
+import { BrandLogo } from '../BrandLogo'
 import { BarChart3, Boxes, CircleDollarSign, ClipboardList, LayoutDashboard, LifeBuoy, Package, Receipt, Settings, ShieldCheck, ShoppingBag, Store, Tags, Truck, Users, WalletCards, X } from 'lucide-react'
 
 const navigationGroups = [
@@ -77,8 +78,7 @@ export function AdminSidebar({ open, collapsed, onClose }: { open: boolean; coll
       aria-label="Admin navigation"
     >
       <div className={`mb-7 flex items-center gap-3 rounded-2xl border border-slate-100 bg-slate-50/70 px-2.5 py-2.5 ${collapsed ? 'lg:justify-center lg:border-transparent lg:bg-transparent lg:px-0' : ''}`}>
-        <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-600 via-indigo-600 to-violet-500 text-sm font-bold text-white shadow-lg shadow-indigo-500/20">V<span className="absolute bottom-1.5 right-1.5 h-1.5 w-1.5 rounded-full bg-cyan-300" /></div>
-        <div className={collapsed ? 'lg:hidden' : ''}><div className="text-lg font-bold tracking-tight text-slate-900">Vendora</div><div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">Admin panel</div></div>
+        <BrandLogo compact showWordmark={!collapsed} />
         <button type="button" onClick={onClose} className="ml-auto rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-900 lg:hidden" aria-label="Close navigation"><X className="h-5 w-5" /></button>
       </div>
 

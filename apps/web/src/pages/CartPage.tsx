@@ -14,6 +14,7 @@ export function CartPage() {
   const items = useCartStore((state) => state.items)
   const summary = useCartStore((state) => state.summary)
   const loadForUser = useCartStore((state) => state.loadForUser)
+  const refreshQuote = useCartStore((state) => state.refreshQuote)
   const updateQuantity = useCartStore((state) => state.updateQuantity)
   const removeItem = useCartStore((state) => state.removeItem)
   const clear = useCartStore((state) => state.clear)
@@ -29,15 +30,21 @@ export function CartPage() {
     }
 
     loadForUser(user.id)
+      .then(() => refreshQuote(String(user.id)))
       .catch((err) => setError(err instanceof Error ? err.message : 'Unable to load cart.'))
       .finally(() => setLoading(false))
-  }, [loadForUser, user?.id])
+  }, [loadForUser, refreshQuote, user?.id])
 
-  const subtotal = getCartSubtotal(items)
-  const shipping = summary?.shipping ?? (subtotal > 0 ? 12 : 0)
-  const tax = summary?.tax ?? subtotal * 0.08
-  const discount = summary?.discount ?? 0
-  const total = summary?.total ?? subtotal + shipping + tax - discount
+  const subtotal = summary?.subtotal ?? (isAuthenticated ? 0 : getCartSubtotal(items))
+  const shipping = summary?.shipping
+  const tax = summary?.tax
+  const discount = summary?.discount
+  const total = summary?.total
+  const sellerGroups = [...new Map(items.map((item) => [item.sellerId || item.shop || 'seller', item.shop || 'Seller'])).entries()].map(([sellerId, sellerName]) => ({
+    sellerId,
+    sellerName,
+    items: items.filter((item) => (item.sellerId || item.shop || 'seller') === sellerId),
+  }))
 
   const runCartMutation = async (action: string, mutation: () => Promise<unknown>) => {
     if (pendingAction) return
@@ -61,8 +68,15 @@ export function CartPage() {
       <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
         {!isAuthenticated && items.length === 0 ? <EmptyState title="Your cart is empty" message="Discover products from trusted marketplace sellers and add your favorites here." action={<button type="button" onClick={() => navigate('/shop')} className="rounded-xl bg-brand-600 px-4 py-2.5 font-semibold text-white">Continue shopping</button>} /> : loading ? <LoadingState variant="list" /> : items.length ? (
           <>
-            <div className="grid gap-4 md:grid-cols-2">
-              {items.map((item) => (
+            <div className="space-y-6">
+              {sellerGroups.map((group) => (
+                <section key={group.sellerId} aria-labelledby={`seller-${group.sellerId}`}>
+                  <div className="mb-3 flex items-center justify-between border-b border-slate-200 pb-3">
+                    <h2 id={`seller-${group.sellerId}`} className="font-bold text-slate-900">Seller: {group.sellerName}</h2>
+                    <span className="text-sm font-semibold text-slate-500">Seller subtotal: {formatCurrency(getCartSubtotal(group.items))}</span>
+                  </div>
+                  <div className="grid gap-4 md:grid-cols-2">
+              {group.items.map((item) => (
                 <div key={item.id} className="rounded-2xl bg-slate-50 p-5">
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex min-w-0 items-start gap-3">
@@ -84,9 +98,12 @@ export function CartPage() {
                   {item.stock !== undefined && <p className="mt-2 text-xs text-slate-500">{item.stock} available</p>}
                 </div>
               ))}
+                  </div>
+                </section>
+              ))}
             </div>
             <div className="mt-6 flex flex-wrap gap-4 text-lg font-bold text-slate-900">
-              <span>Subtotal: {formatCurrency(subtotal)}</span><span>Shipping: {formatCurrency(shipping)}</span><span>Tax: {formatCurrency(tax)}</span>{discount > 0 && <span className="text-emerald-600">Discount: -{formatCurrency(discount)}</span>}<span>Total: {formatCurrency(total)}</span>
+              <span>Subtotal: {formatCurrency(subtotal)}</span>{summary ? <><span>Shipping: {formatCurrency(shipping ?? 0)}</span><span>Tax: {formatCurrency(tax ?? 0)}</span>{(discount ?? 0) > 0 && <span className="text-emerald-600">Discount: -{formatCurrency(discount ?? 0)}</span>}<span>Total: {formatCurrency(total ?? 0)}</span></> : <span className="text-sm font-medium text-slate-500">Sign in to get a server-calculated total</span>}
             </div>
             <div className="mt-6 flex flex-wrap justify-between gap-3">
               <Button type="button" variant="secondary" disabled={Boolean(pendingAction)} loading={pendingAction === 'clear'} loadingLabel="Clearing..." onClick={() => void runCartMutation('clear', clear)}>Clear cart</Button>

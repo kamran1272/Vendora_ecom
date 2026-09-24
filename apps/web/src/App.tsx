@@ -7,12 +7,12 @@ import { Button } from '@/components/ui/DesignSystem'
 import { StatCard } from '@/components/ui/StatCard'
 import { ErrorState, LoadingState } from '@/components/ui/FeedbackState'
 import { ToastHost } from '@/components/ui/ToastHost'
-import { apiRequest } from '@/services/api'
+import { apiRequest, getAuthToken } from '@/services/api'
 import { formatCurrency } from '@/utils/format'
 import { fetchCatalogCategories, fetchCatalogBrands, fetchCatalogShops, fetchCatalogShop, type CatalogCategory, type CatalogBrand, type CatalogShop } from '@/services/catalog'
 import type { MarketplaceProduct } from '@/services/marketplace'
 import { useAuth } from '@/store/auth'
-import { getCartSubtotal, useCartStore } from '@/store/cart'
+import { useCartStore } from '@/store/cart'
 import {
   createChatConversation,
   fetchChatConversations,
@@ -73,25 +73,9 @@ const headerMeta = {
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) || '/api'
 
-function getStoredAccessToken() {
-  return localStorage.getItem('access_token') || localStorage.getItem('accessToken')
-}
-
-function getStoredUserRole(): string | null {
-  const token = getStoredAccessToken()
-  if (!token) return null
-
-  try {
-    const payload = JSON.parse(atob(token.split('.')[1] || ''))
-    return payload.role || null
-  } catch {
-    return null
-  }
-}
-
 function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode; allowedRoles?: string[] }) {
-  const token = getStoredAccessToken()
-  const role = getStoredUserRole()
+  const token = useAuth((state) => state.token)
+  const role = useAuth((state) => state.user?.role)
   const location = useLocation()
 
   if (!token) {
@@ -105,54 +89,13 @@ function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode;
   return <>{children}</>
 }
 
-function VendoraLogo({ compact = false }: { compact?: boolean }) {
-  return (
-    <div className="flex items-center gap-2 sm:gap-3">
-      <div className="relative h-14 w-14 shrink-0 sm:h-16 sm:w-16">
-        <svg viewBox="0 0 160 160" className="h-full w-full" aria-label="Vendora logo" role="img">
-          <defs>
-            <linearGradient id="vendoraBag" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#f9b24a" />
-              <stop offset="100%" stopColor="#f38a2d" />
-            </linearGradient>
-          </defs>
-
-          <circle cx="80" cy="80" r="63" fill="#1f2d4d" />
-          <path
-            d="M55 74c0-15 12-27 27-27h18c15 0 27 12 27 27v10c0 14-5 25-15 34L88 118l-23-20C55 90 50 79 50 68V74Z"
-            fill="url(#vendoraBag)"
-          />
-          <path d="M80 47c-13 0-24 9-27 21h54c-3-12-14-21-27-21Z" fill="#f7ab43" opacity="0.95" />
-          <path d="M48 76c0-19 14-35 32-39v38L48 76Z" fill="#1f2d4d" opacity="0.94" />
-          <path d="M112 76c0-19-14-35-32-39v38l32 1Z" fill="#1f2d4d" opacity="0.94" />
-          <path d="M82 26c8 0 15 7 15 15v14H67V41c0-8 7-15 15-15Z" fill="#1f2d4d" />
-          <path d="M64 50c0-16 13-29 29-29s29 13 29 29" fill="none" stroke="#1f2d4d" strokeWidth="8" strokeLinecap="round" />
-          <path d="M52 78L67 130h28l-12-52H52Z" fill="#1f2d4d" />
-          <path d="M106 78L94 130H66l13-52h27Z" fill="#1f2d4d" />
-          <path d="M84 48 L55 127L84 96L113 127L84 48Z" fill="#f7ab43" />
-          <circle cx="83" cy="56" r="6" fill="#1f2d4d" />
-        </svg>
-      </div>
-
-      <div className="flex items-end leading-none">
-        <span className={compact ? 'text-[2.2rem] sm:text-[3.1rem]' : 'text-[2.8rem] sm:text-[6.2rem]'} style={{ fontWeight: 900, letterSpacing: '-0.08em', color: '#1f2d4d', fontFamily: 'Arial, sans-serif' }}>
-          Vendo
-        </span>
-        <span className={compact ? 'text-[2.2rem] sm:text-[3.1rem]' : 'text-[2.8rem] sm:text-[6.2rem]'} style={{ fontWeight: 900, letterSpacing: '-0.08em', color: '#f39a3d', fontFamily: 'Arial, sans-serif' }}>
-          ra
-        </span>
-      </div>
-    </div>
-  )
-}
-
 function App() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <CustomerHeader />
       <ToastHost />
 
-      <main className="mx-auto max-w-7xl px-4 py-6 pb-24 sm:py-10 md:pb-10">
+      <main className="mx-auto w-full max-w-[1440px] px-4 py-6 pb-24 sm:px-6 sm:py-10 md:px-8 md:pb-10">
         <FloatingSupportButton />
         <Suspense fallback={<LoadingState />}>
         <Routes>
@@ -984,20 +927,11 @@ function AuthPage({ mode }: { mode: 'login' | 'register' }) {
         body: JSON.stringify(payload),
       })
 
-      const token = data.accessToken || data.access_token
-      if (token) {
-        localStorage.setItem('access_token', token)
-        localStorage.setItem('accessToken', token)
-      }
-
-      if (data.user) {
-        localStorage.setItem('vendora_user', JSON.stringify(data.user))
-      }
-
+      const token = data.accessToken || data.access_token || data.token || null
       login({
         user: data.user ?? null,
-        token: token ?? data.token ?? null,
-        accessToken: token ?? data.token ?? null,
+        token,
+        accessToken: token,
       })
 
       if (mode === 'register') {
@@ -1449,7 +1383,7 @@ function SupportPage() {
 
   const handleStartSupport = async (type: string) => {
     if (startingSubject) return
-    if (!isAuthenticated) {
+    if (!isAuthenticated || !getAuthToken()) {
       navigate('/login')
       return
     }
@@ -1510,6 +1444,7 @@ function CartPage() {
   const { user, isAuthenticated } = useAuth()
   const items = useCartStore((state) => state.items)
   const summary = useCartStore((state) => state.summary)
+  const refreshQuote = useCartStore((state) => state.refreshQuote)
   const loadForUser = useCartStore((state) => state.loadForUser)
   const updateQuantity = useCartStore((state) => state.updateQuantity)
   const removeItem = useCartStore((state) => state.removeItem)
@@ -1525,15 +1460,16 @@ function CartPage() {
     }
 
     loadForUser(user.id)
+      .then(() => refreshQuote(String(user.id)))
       .catch((err) => setError(err instanceof Error ? err.message : 'Unable to load cart.'))
       .finally(() => setLoading(false))
-  }, [loadForUser, user?.id])
+  }, [loadForUser, refreshQuote, user?.id])
 
-  const subtotal = getCartSubtotal(items)
-  const shipping = summary?.shipping ?? (subtotal > 0 ? 12 : 0)
-  const tax = summary?.tax ?? subtotal * 0.08
+  const subtotal = summary?.subtotal ?? 0
+  const shipping = summary?.shipping ?? 0
+  const tax = summary?.tax ?? 0
   const discount = summary?.discount ?? 0
-  const total = summary?.total ?? subtotal + shipping + tax - discount
+  const total = summary?.total ?? 0
 
   const runCartMutation = async (action: string, mutation: () => Promise<unknown>) => {
     if (pendingAction) return
@@ -1611,6 +1547,8 @@ function CheckoutPage() {
   const navigate = useNavigate()
   const { user, isAuthenticated } = useAuth()
   const items = useCartStore((state) => state.items)
+  const summary = useCartStore((state) => state.summary)
+  const refreshQuote = useCartStore((state) => state.refreshQuote)
   const checkout = useCartStore((state) => state.checkout)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -1633,10 +1571,15 @@ function CheckoutPage() {
     setAddress((current) => ({ ...current, fullName: current.fullName || user?.name || '' }))
   }, [user?.name])
 
-  const subtotal = getCartSubtotal(items)
-  const shipping = subtotal > 0 ? 12 : 0
-  const tax = subtotal * 0.08
-  const total = subtotal + shipping + tax
+  useEffect(() => {
+    if (!user?.id || !items.length) return
+    void refreshQuote(String(user.id)).catch((err) => setError(err instanceof Error ? err.message : 'Unable to calculate the order total.'))
+  }, [items.length, refreshQuote, user?.id])
+
+  const subtotal = summary?.subtotal ?? 0
+  const shipping = summary?.shipping ?? 0
+  const tax = summary?.tax ?? 0
+  const total = summary?.total ?? 0
 
   const handleCheckout = async () => {
     if (!user?.id) {
@@ -1658,6 +1601,7 @@ function CheckoutPage() {
     setError(null)
 
     try {
+      await refreshQuote(String(user.id))
       const result = await checkout(String(user.id), {
         paymentMethod: 'stripe',
         shippingAddress: address,
@@ -2608,7 +2552,7 @@ function CustomerChatPage() {
   const [creatingConversation, setCreatingConversation] = useState(false)
 
   useEffect(() => {
-    if (!isAuthenticated) {
+    if (!isAuthenticated || !getAuthToken()) {
       setLoading(false)
       return
     }
@@ -2625,7 +2569,7 @@ function CustomerChatPage() {
   }, [isAuthenticated])
 
   useEffect(() => {
-    if (!selectedId) {
+    if (!selectedId || !isAuthenticated || !getAuthToken()) {
       setMessages([])
       return
     }
@@ -2814,7 +2758,7 @@ function CustomerMessagesPage() {
   const [messageLoading, setMessageLoading] = useState(false)
 
   useEffect(() => {
-    if (!isAuthenticated) {
+    if (!isAuthenticated || !getAuthToken()) {
       setLoading(false)
       return
     }
@@ -2838,7 +2782,7 @@ function CustomerMessagesPage() {
   }, [isAuthenticated, navigate, selectedId])
 
   useEffect(() => {
-    if (!selectedId) {
+    if (!selectedId || !isAuthenticated || !getAuthToken()) {
       setMessages([])
       return
     }
@@ -2985,16 +2929,6 @@ function CustomerMessagesPage() {
 function FloatingSupportButton() {
   const navigate = useNavigate()
   const { isAuthenticated } = useAuth()
-  const [unreadCount, setUnreadCount] = useState(0)
-
-  useEffect(() => {
-    if (!isAuthenticated) return
-    let active = true
-    const load = () => fetchChatConversations().then((items) => { if (active) setUnreadCount(items.reduce((total, item) => total + Number(item.unreadCount || 0), 0)) }).catch(() => undefined)
-    load()
-    const interval = window.setInterval(load, 30000)
-    return () => { active = false; window.clearInterval(interval) }
-  }, [isAuthenticated])
 
   return (
     <button
@@ -3002,7 +2936,7 @@ function FloatingSupportButton() {
       onClick={() => navigate(isAuthenticated ? '/account/messages' : '/support/chat')}
       className="fixed bottom-6 right-6 z-50 inline-flex items-center gap-3 rounded-full bg-[#1f2d4d] px-5 py-3 text-sm font-semibold text-white shadow-[0_20px_45px_rgba(31,45,77,0.35)] transition hover:-translate-y-0.5 hover:bg-[#162440]"
     >
-      <span className="relative flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-lg">💬{unreadCount > 0 && <span className="absolute -right-2 -top-2 flex h-5 min-w-5 items-center justify-center rounded-full bg-orange-400 px-1 text-[10px] font-bold text-white">{unreadCount}</span>}</span>
+      <span className="relative flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-lg">💬</span>
       {isAuthenticated ? 'Open messages' : 'Need help?'}
     </button>
   )
@@ -3023,6 +2957,7 @@ function Field({
   value,
   type = 'text',
   autoComplete,
+  required = false,
   onChange,
 }: {
   label: string
@@ -3030,6 +2965,7 @@ function Field({
   value?: string
   type?: string
   autoComplete?: string
+  required?: boolean
   onChange?: (value: string) => void
 }) {
   return (
@@ -3041,6 +2977,7 @@ function Field({
         value={value ?? ''}
         onChange={(event) => onChange?.(event.target.value)}
         placeholder={placeholder}
+        required={required}
         className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none transition focus:border-brand-500 focus:bg-white"
       />
     </label>

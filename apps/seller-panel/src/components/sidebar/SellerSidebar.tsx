@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import type { ReactNode } from 'react'
 import { clearSellerSession } from '../../services/api'
+import { BrandLogo } from '../BrandLogo'
 import { getSellerDashboard } from '../../services/dashboard.service'
 import { fetchSellerChatConversations } from '../../services/chat'
 import { useSellerLanguage } from '../../i18n/sellerLanguage'
@@ -90,25 +91,6 @@ const sidebarItems: SidebarItem[] = [
   { label: 'Payment Settings', route: '/seller/payment-settings', icon: <CreditCard size={17} strokeWidth={1.9} /> },
 ]
 
-type SellerProfile = {
-  name: string
-  shopName: string
-  email: string
-}
-
-function getStoredSellerProfile(): SellerProfile {
-  try {
-    const user = JSON.parse(localStorage.getItem('vendora_user') || 'null')
-    return {
-      name: user?.name || 'Seller profile unavailable',
-      shopName: user?.shopName || user?.name || 'Seller profile unavailable',
-      email: user?.email || 'Email unavailable',
-    }
-  } catch {
-    return { name: 'Seller profile unavailable', shopName: 'Seller profile unavailable', email: 'Email unavailable' }
-  }
-}
-
 type SellerSidebarProps = {
   collapsed?: boolean
   mobile?: boolean
@@ -131,7 +113,6 @@ export function SellerSidebar({ collapsed = false, mobile = false, onClose, onTo
       return {}
     }
   })
-  const [seller, setSeller] = useState<SellerProfile>(() => getStoredSellerProfile())
   const [newOrderCount, setNewOrderCount] = useState<number | null>(null)
   const [unreadConversationCount, setUnreadConversationCount] = useState<number | null>(null)
   const navigationRef = useRef<HTMLElement | null>(null)
@@ -140,12 +121,6 @@ export function SellerSidebar({ collapsed = false, mobile = false, onClose, onTo
   useEffect(() => {
     setNewOrderCount(Math.max(0, Number(dashboardQuery.data?.orders?.newOrder) || 0))
   }, [dashboardQuery.data])
-
-  useEffect(() => {
-    const syncSeller = () => setSeller(getStoredSellerProfile())
-    window.addEventListener('storage', syncSeller)
-    return () => window.removeEventListener('storage', syncSeller)
-  }, [])
 
   useEffect(() => {
     localStorage.setItem(expandedStateKey, JSON.stringify(expanded))
@@ -266,16 +241,7 @@ export function SellerSidebar({ collapsed = false, mobile = false, onClose, onTo
     >
       <div className="flex min-h-[72px] items-center justify-between gap-3 border-b border-[#e2e8f0] bg-white px-3 py-3">
         <div className="flex min-w-0 items-center gap-3 overflow-hidden">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#3b82f6] text-sm font-bold text-white shadow-sm">
-            {(seller.name || seller.shopName).slice(0, 1).toUpperCase()}
-          </div>
-          {!collapsed || mobile ? (
-            <div className="min-w-0">
-              <div className="truncate text-base font-extrabold tracking-tight text-[#1e293b]">{seller.shopName}</div>
-              <div className="text-[10px] uppercase tracking-[0.2em] text-[#64748b]">seller workspace</div>
-              <div className="mt-0.5 truncate text-xs text-[#64748b]">{seller.email}</div>
-            </div>
-          ) : null}
+          <BrandLogo compact showWordmark={!collapsed || mobile} />
         </div>
         {mobile ? (
           <button

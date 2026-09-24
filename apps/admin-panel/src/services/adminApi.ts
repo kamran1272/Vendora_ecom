@@ -12,6 +12,32 @@ import {
 import { showAdminToast } from '../components/feedback/AdminToast'
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) || '/api'
+const ADMIN_TOKEN_STORAGE_KEYS = ['access_token', 'accessToken'] as const
+const ADMIN_REFRESH_TOKEN_STORAGE_KEYS = ['refresh_token', 'refreshToken'] as const
+
+function getStoredAdminToken() {
+  return localStorage.getItem('vendora_admin_access_token') || localStorage.getItem('access_token') || localStorage.getItem('accessToken') || null
+}
+
+function setStoredAdminToken(token: string) {
+  localStorage.setItem('vendora_admin_access_token', token)
+  localStorage.setItem('access_token', token)
+  localStorage.setItem('accessToken', token)
+}
+
+function setStoredAdminRefreshToken(refreshToken: string) {
+  localStorage.setItem('vendora_admin_refresh_token', refreshToken)
+  localStorage.setItem('refresh_token', refreshToken)
+  localStorage.setItem('refreshToken', refreshToken)
+}
+
+function clearStoredAdminSession() {
+  localStorage.removeItem('vendora_admin_access_token')
+  localStorage.removeItem('vendora_admin_refresh_token')
+  localStorage.removeItem('vendora_admin_user')
+  ADMIN_TOKEN_STORAGE_KEYS.forEach((key) => localStorage.removeItem(key))
+  ADMIN_REFRESH_TOKEN_STORAGE_KEYS.forEach((key) => localStorage.removeItem(key))
+}
 
 export type AdminApiErrorCode = 'NETWORK' | 'UNAUTHORIZED' | 'FORBIDDEN' | 'NOT_FOUND' | 'CONFLICT' | 'VALIDATION' | 'RATE_LIMIT' | 'SERVER' | 'UNKNOWN'
 
@@ -60,13 +86,7 @@ export function notifyAdminApiError(error: AdminApiError) {
   const copy = messages[error.code]
   showAdminToast({ tone: error.code === 'UNAUTHORIZED' || error.code === 'FORBIDDEN' || error.code === 'VALIDATION' || error.code === 'NOT_FOUND' || error.code === 'CONFLICT' || error.code === 'RATE_LIMIT' || error.code === 'SERVER' || error.code === 'UNKNOWN' ? 'error' : 'warning', ...copy })
   if (error.code === 'UNAUTHORIZED') {
-    localStorage.removeItem('vendora_admin_access_token')
-    localStorage.removeItem('vendora_admin_refresh_token')
-    localStorage.removeItem('vendora_admin_user')
-    localStorage.removeItem('access_token')
-    localStorage.removeItem('accessToken')
-    localStorage.removeItem('refresh_token')
-    localStorage.removeItem('refreshToken')
+    clearStoredAdminSession()
 
     if (window.location.pathname !== '/admin/login') {
       window.location.assign('/admin/login?reason=session_expired')
@@ -75,7 +95,7 @@ export function notifyAdminApiError(error: AdminApiError) {
 }
 
 function getAuthHeaders(): Record<string, string> {
-  const token = localStorage.getItem('access_token') || localStorage.getItem('accessToken')
+  const token = getStoredAdminToken()
   return token ? { Authorization: `Bearer ${token}` } : {}
 }
 
@@ -95,13 +115,9 @@ async function refreshAdminAccessToken() {
   const nextRefreshToken = data.refreshToken || data.refresh_token
   if (!accessToken) return null
 
-  localStorage.setItem('vendora_admin_access_token', accessToken)
-  localStorage.setItem('access_token', accessToken)
-  localStorage.setItem('accessToken', accessToken)
+  setStoredAdminToken(accessToken)
   if (nextRefreshToken) {
-    localStorage.setItem('vendora_admin_refresh_token', nextRefreshToken)
-    localStorage.setItem('refresh_token', nextRefreshToken)
-    localStorage.setItem('refreshToken', nextRefreshToken)
+    setStoredAdminRefreshToken(nextRefreshToken)
   }
   return accessToken
 }

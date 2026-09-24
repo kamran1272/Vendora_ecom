@@ -1,6 +1,5 @@
 export * from './account'
-
-export type UserRole = 'customer' | 'seller' | 'admin'
+export * from './auth'
 
 export type Product = {
   id: string
@@ -20,5 +19,5 @@ export type ApiResponse<T> = {
 export const appConfig = {
   name: 'Vendora',
   version: '0.1.0',
-  env: process.env.NODE_ENV ?? 'development'
-}
+  env: process.env.NODE_ENV ?? 'development',
+};

@@ -92,7 +92,7 @@ export function ProductInfoPanel({ product, onAddToCart, onBuyNow, wishlistId }:
   }
 
   return (
-    <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
+    <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm xl:sticky xl:top-24 xl:self-start">
       <div className="flex items-center gap-3 text-sm text-slate-500">
         <span className="rounded-full bg-orange-50 px-2.5 py-1 font-semibold uppercase tracking-[0.14em] text-[#d97706]">Featured</span>
         <span>{product.stockStatus}</span>
@@ -159,8 +159,8 @@ export function ProductInfoPanel({ product, onAddToCart, onBuyNow, wishlistId }:
       </div>
 
       <div className="fixed inset-x-0 bottom-0 z-30 flex gap-2 border-t border-slate-200 bg-white/95 p-3 shadow-[0_-8px_24px_rgba(15,23,42,0.12)] backdrop-blur md:hidden">
-        <Button type="button" disabled={!canPurchase} loading={isSubmitting} loadingLabel="Adding..." onClick={() => void runAction(onAddToCart, 'Added to cart')} className="flex-1">Add to cart</Button>
-        <Button type="button" disabled={!canPurchase} loading={isSubmitting} loadingLabel="Buying..." onClick={() => void runAction(onBuyNow, 'Ready for checkout')} className="flex-1 bg-[#f59a36] hover:bg-[#ee7c22]">Buy now</Button>
+        <Button type="button" ariaLabel="Add product to cart" disabled={!canPurchase} loading={isSubmitting} loadingLabel="Adding..." onClick={() => void runAction(onAddToCart, 'Added to cart')} className="flex-1">Add to cart</Button>
+        <Button type="button" ariaLabel="Buy product now" disabled={!canPurchase} loading={isSubmitting} loadingLabel="Buying..." onClick={() => void runAction(onBuyNow, 'Ready for checkout')} className="flex-1 bg-[#f59a36] hover:bg-[#ee7c22]">Buy now</Button>
       </div>
     </div>
   )

@@ -1,6 +1,7 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
+import { UserRole } from '@vendora/shared';
 import { PrismaService } from '@/database/prisma.service';
 
 @Injectable()
@@ -20,7 +21,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
     if (!user) throw new UnauthorizedException('User account is inactive or unavailable.');
 
-    if (user.role === 'SELLER') {
+    if (user.role === UserRole.SELLER) {
       const seller = await this.prisma.seller.findUnique({ where: { userId: user.id }, select: { status: true } });
       if (!seller || seller.status !== 'ACTIVE') throw new UnauthorizedException('Seller account is not active.');
     }

@@ -6,7 +6,9 @@ import { SELLER_REGISTRATION_URL } from '@/config/customer'
 import { fetchCatalogCategories, type CatalogCategory } from '@/services/catalog'
 import { useCartStore } from '@/store/cart'
 import { useWishlistStore } from '@/store/wishlist'
+import { useAuth } from '@/store/auth'
 import { DEFAULT_CURRENCY } from '@/utils/format'
+import { BrandLogo } from '@/components/common/BrandLogo'
 
 const navigationItems = [
   { label: 'Home', href: '/' },
@@ -23,15 +25,6 @@ const drawerLinks = [
   { label: 'Orders', href: '/account/orders' },
 ]
 
-function VendoraLogo() {
-  return (
-    <div className="flex items-center gap-2" aria-label="Vendora home">
-      <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#1f2d4d] text-xl font-black text-[#f59a36] shadow-sm">V</div>
-      <span className="text-2xl font-black tracking-tight text-[#1f2d4d]">Vendo<span className="text-[#f59a36]">ra</span></span>
-    </div>
-  )
-}
-
 export function CustomerHeader() {
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLElement>(null)
@@ -39,6 +32,7 @@ export function CustomerHeader() {
   const [categories, setCategories] = useState<CatalogCategory[]>([])
   const cartCount = useCartStore((state) => state.items.reduce((total, item) => total + item.quantity, 0))
   const wishlistCount = useWishlistStore((state) => state.ids.length)
+  const isAuthenticated = useAuth((state) => state.isAuthenticated)
 
   useEffect(() => {
     setMenuOpen(false)
@@ -78,14 +72,14 @@ export function CustomerHeader() {
       <div className="mx-auto max-w-[1500px] px-4 py-3">
         <div className="flex items-center gap-3">
           <button type="button" aria-label="Open menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)} className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-lg text-slate-700 md:hidden">☰</button>
-          <Link to="/" className="shrink-0"><VendoraLogo /></Link>
+          <BrandLogo href="/" compact className="shrink-0" />
 
           <div className="hidden min-w-0 flex-1 md:flex"><SearchBar /></div>
 
           <div className="ml-auto flex items-center gap-2">
             <Link to="/account/wishlist" className="relative hidden h-10 items-center gap-2 rounded-xl border border-slate-200 px-3 text-sm font-semibold text-slate-700 transition hover:border-brand-300 hover:text-brand-600 lg:flex">Wishlist{wishlistCount > 0 && <span className="rounded-full bg-orange-400 px-1.5 py-0.5 text-[10px] text-white">{wishlistCount}</span>}</Link>
             <NotificationBadge />
-            <Link to="/account" className="hidden h-10 items-center rounded-xl border border-slate-200 px-3 text-sm font-semibold text-slate-700 transition hover:border-brand-300 hover:text-brand-600 sm:flex">Account</Link>
+            <Link to={isAuthenticated ? '/account' : '/login'} className="hidden h-10 items-center rounded-xl border border-slate-200 px-3 text-sm font-semibold text-slate-700 transition hover:border-brand-300 hover:text-brand-600 sm:flex">{isAuthenticated ? 'Account' : 'Sign in'}</Link>
             <Link to="/cart" className="relative flex h-10 items-center gap-2 rounded-xl border border-slate-200 px-3 text-sm font-semibold text-slate-700 transition hover:border-brand-300 hover:text-brand-600">Cart{cartCount > 0 && <span className="rounded-full bg-orange-400 px-1.5 py-0.5 text-[10px] text-white">{cartCount}</span>}</Link>
           </div>
         </div>
@@ -119,7 +113,7 @@ export function CustomerHeader() {
       </aside>}
 
       <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-slate-200 bg-white/95 px-2 py-2 shadow-[0_-8px_24px_rgba(15,23,42,0.12)] backdrop-blur md:hidden" aria-label="Mobile navigation">
-        {[['Home', '/'], ['Shop', '/shop'], ['Categories', '/categories'], ['Wishlist', '/account/wishlist'], ['Cart', '/cart']].map(([label, href]) => <Link key={href} to={href} className="flex min-h-11 flex-col items-center justify-center rounded-xl px-1 text-[0.68rem] font-semibold text-slate-600 transition hover:bg-slate-50 hover:text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"><span aria-hidden="true" className="text-base">{label === 'Home' ? '⌂' : label === 'Shop' ? '⌕' : label === 'Categories' ? '▦' : label === 'Wishlist' ? '♡' : '🛒'}</span><span>{label}</span></Link>)}
+        {[['Home', '/'], ['Categories', '/categories'], ['Wishlist', '/account/wishlist'], ['Orders', '/account/orders'], ['Account', isAuthenticated ? '/account' : '/login']].map(([label, href]) => <Link key={href} to={href} className="flex min-h-11 flex-col items-center justify-center rounded-xl px-1 text-[0.68rem] font-semibold text-slate-600 transition hover:bg-slate-50 hover:text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"><span aria-hidden="true" className="text-base">{label === 'Home' ? '⌂' : label === 'Categories' ? '▦' : label === 'Wishlist' ? '♡' : label === 'Orders' ? '▤' : '●'}</span><span>{label}</span></Link>)}
       </nav>
     </header>
   )

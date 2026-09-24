@@ -70,7 +70,7 @@ export function AdminRecordDetailPage({ title, description, fetcher, backPath, b
           <Link to={backPath} className="text-sm font-medium text-slate-600 hover:text-slate-900">← {backLabel}</Link>
           {id ? <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-500">ID {id}</span> : null}
         </div>
-        <header className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-[0_8px_30px_rgba(15,23,42,0.04)]">
+        <header className="admin-page-header">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-indigo-600">Record detail</p>
           <h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">{title}</h1>
           <p className="mt-2 text-slate-600">{description}</p>

@@ -67,7 +67,7 @@ export class SellersService {
       customerName: order.user?.name ?? 'Customer',
       sellerItems: order.items.filter((item) => item.sellerId === sellerId).map((item) => {
         const unitCost = costs.get(item.warehouseProductId || '') || 0;
-        return { ...item, unitCost, profit: (Number(item.price) - unitCost) * Number(item.quantity) };
+        return { ...item, unitCost: Number(unitCost), profit: (Number(item.price) - Number(unitCost)) * Number(item.quantity) };
       }),
     }));
   }
@@ -613,7 +613,7 @@ export class SellersService {
       const productItems = sellerItems.filter(({ item }) => item.warehouseProductId === product.warehouseProductId);
       const revenue = productItems.reduce((sum, entry) => sum + Number(entry.item.price || 0) * Number(entry.item.quantity || 0), 0);
       const ratings = productRatings.get(product.warehouseProductId) || [];
-      return { id: product.id, name: product.warehouseProduct.name, units: productItems.reduce((sum, entry) => sum + Number(entry.item.quantity || 0), 0), revenue, profit: productItems.reduce((sum, entry) => sum + (Number(entry.item.price || 0) - product.warehouseProduct.basePrice) * Number(entry.item.quantity || 0), 0), stock: product.warehouseProduct.stock, price: product.sellingPrice, rating: ratings.length ? ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length : null, image: firstProductImage(product.warehouseProduct.images, product.warehouseProduct.thumbnail) };
+      return { id: product.id, name: product.warehouseProduct.name, units: productItems.reduce((sum, entry) => sum + Number(entry.item.quantity || 0), 0), revenue, profit: productItems.reduce((sum, entry) => sum + (Number(entry.item.price || 0) - Number(product.warehouseProduct.basePrice)) * Number(entry.item.quantity || 0), 0), stock: product.warehouseProduct.stock, price: Number(product.sellingPrice), rating: ratings.length ? ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length : null, image: firstProductImage(product.warehouseProduct.images, product.warehouseProduct.thumbnail) };
     }).sort((a, b) => b.revenue - a.revenue).slice(0, 8);
     const recentOrders = sellerOrders.slice(0, 10).map((order) => {
       const items = order.sellerItems;
@@ -736,7 +736,7 @@ export class SellersService {
       shippingInformation: product.warehouseProduct.shippingInformation,
       attributes: JSON.parse(product.warehouseProduct.attributes || '[]'),
       variants: JSON.parse(product.warehouseProduct.variants || '[]'),
-      discount: product.warehouseProduct.salePrice && product.sellingPrice > product.warehouseProduct.salePrice ? Math.round((1 - product.warehouseProduct.salePrice / product.sellingPrice) * 100) : 0,
+      discount: product.warehouseProduct.salePrice && Number(product.sellingPrice) > Number(product.warehouseProduct.salePrice) ? Math.round((1 - Number(product.warehouseProduct.salePrice) / Number(product.sellingPrice)) * 100) : 0,
       sales: salesByProduct.get(product.warehouseProductId) || 0,
       rating: (ratingsByProduct.get(product.warehouseProductId) || []).reduce((sum, rating) => sum + rating, 0) / Math.max((ratingsByProduct.get(product.warehouseProductId) || []).length, 1),
       status: product.status,
@@ -1025,9 +1025,9 @@ export class SellersService {
     const costs = new Map(sellerProducts.map((product) => [product.warehouseProductId, product.warehouseProduct.basePrice]));
     const sellerItems = order.items.filter((item) => item.sellerId === seller.id).map((item) => {
       const unitCost = costs.get(item.warehouseProductId || '') || 0;
-      return { ...item, unitCost, profit: (Number(item.price) - unitCost) * Number(item.quantity) };
+      return { ...item, unitCost: Number(unitCost), profit: (Number(item.price) - Number(unitCost)) * Number(item.quantity) };
     });
-    return { ...order, items: sellerItems, customerName: order.user?.name ?? 'Customer', sellerItems, sellerSubtotal: sellerItems.reduce((sum, item) => sum + item.price * item.quantity, 0), sellerProfit: sellerItems.reduce((sum, item) => sum + item.profit, 0) };
+    return { ...order, items: sellerItems, customerName: order.user?.name ?? 'Customer', sellerItems, sellerSubtotal: sellerItems.reduce((sum, item) => sum + Number(item.price) * Number(item.quantity), 0), sellerProfit: sellerItems.reduce((sum, item) => sum + Number(item.profit), 0) };
   }
 
   async updateSellerOrderStatus(id: number | string, userId: number | string, status: string) {
@@ -1247,7 +1247,7 @@ export class SellersService {
       return { label: date.toLocaleDateString('en-US', { month: 'short' }), clicks: 0, registrations: 0, conversions: 0, earnings: 0 };
     });
     referrals.forEach((referral) => { const bucket = chart.find((item) => item.label === new Date(referral.registeredAt).toLocaleDateString('en-US', { month: 'short' })); if (bucket) { bucket.registrations += 1; if (referral.status === 'CONVERTED') bucket.conversions += 1; } });
-    commissions.forEach((commission) => { const bucket = chart.find((item) => item.label === new Date(commission.createdAt).toLocaleDateString('en-US', { month: 'short' })); if (bucket) bucket.earnings += commission.amount; });
+    commissions.forEach((commission) => { const bucket = chart.find((item) => item.label === new Date(commission.createdAt).toLocaleDateString('en-US', { month: 'short' })); if (bucket) bucket.earnings += Number(commission.amount); });
     return {
       affiliateLink: affiliate.code,
       affiliateCode: affiliate.code,

@@ -22,6 +22,7 @@ type AdminAuthContextValue = {
 const ADMIN_ACCESS_TOKEN_KEY = 'vendora_admin_access_token'
 const ADMIN_REFRESH_TOKEN_KEY = 'vendora_admin_refresh_token'
 const ADMIN_USER_KEY = 'vendora_admin_user'
+const AUTH_TOKEN_KEYS = ['access_token', 'accessToken'] as const
 
 const AdminAuthContext = createContext<AdminAuthContextValue | undefined>(undefined)
 
@@ -49,8 +50,7 @@ function clearStoredAdminSession() {
   localStorage.removeItem(ADMIN_ACCESS_TOKEN_KEY)
   localStorage.removeItem(ADMIN_REFRESH_TOKEN_KEY)
   localStorage.removeItem(ADMIN_USER_KEY)
-  localStorage.removeItem('access_token')
-  localStorage.removeItem('accessToken')
+  AUTH_TOKEN_KEYS.forEach((key) => localStorage.removeItem(key))
   localStorage.removeItem('refresh_token')
   localStorage.removeItem('refreshToken')
 }

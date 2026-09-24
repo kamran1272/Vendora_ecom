@@ -6,9 +6,10 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { Observable } from 'rxjs';
+import { UserRole } from '@vendora/shared';
 
 export const ROLES_KEY = 'roles';
-export const Roles = (...roles: string[]) => {
+export const Roles = (...roles: UserRole[]) => {
   return (target: object, key?: string | symbol, descriptor?: PropertyDescriptor) => {
     Reflect.defineMetadata(ROLES_KEY, roles, descriptor ?? target);
   };
@@ -19,7 +20,7 @@ export class RolesGuard implements CanActivate {
   constructor(private reflector: Reflector) {}
 
   canActivate(context: ExecutionContext): boolean | Promise<boolean> | Observable<boolean> {
-    const requiredRoles = this.reflector.getAllAndOverride<string[]>(ROLES_KEY, [
+    const requiredRoles = this.reflector.getAllAndOverride<UserRole[]>(ROLES_KEY, [
       context.getHandler(),
       context.getClass(),
     ]);
@@ -34,7 +35,7 @@ export class RolesGuard implements CanActivate {
       throw new ForbiddenException('User role is required for this resource.');
     }
 
-    const hasRole = requiredRoles.includes(user.role);
+    const hasRole = requiredRoles.includes(user.role as UserRole);
 
     if (!hasRole) {
       throw new ForbiddenException('You do not have permission to access this resource.');

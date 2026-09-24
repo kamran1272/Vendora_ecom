@@ -3,31 +3,10 @@ import { Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { Eye, EyeOff, ShieldCheck, Sparkles, BarChart3, Box, LockKeyhole, Users } from 'lucide-react'
 import { useAdminAuth } from '../auth/AdminAuthContext'
 import { showAdminToast } from '../components/feedback/AdminToast'
+import { BrandLogo } from '../components/BrandLogo'
 
 function VendoraMark() {
-  return (
-    <div className="flex items-center gap-3">
-      <div className="relative h-12 w-12 rounded-2xl bg-[#1f2d4d] p-2 shadow-lg shadow-slate-800/20">
-        <svg viewBox="0 0 160 160" className="h-full w-full" aria-label="Vendora logo" role="img">
-          <defs>
-            <linearGradient id="vendora-admin-mark" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#f9b24a" />
-              <stop offset="100%" stopColor="#f38a2d" />
-            </linearGradient>
-          </defs>
-          <circle cx="80" cy="80" r="63" fill="#1f2d4d" />
-          <path d="M55 74c0-15 12-27 27-27h18c15 0 27 12 27 27v10c0 14-5 25-15 34L88 118l-23-20C55 90 50 79 50 68V74Z" fill="url(#vendora-admin-mark)" />
-          <path d="M80 47c-13 0-24 9-27 21h54c-3-12-14-21-27-21Z" fill="#f7ab43" opacity="0.95" />
-          <path d="M82 26c8 0 15 7 15 15v14H67V41c0-8 7-15 15-15Z" fill="#1f2d4d" />
-          <path d="M64 50c0-16 13-29 29-29s29 13 29 29" fill="none" stroke="#1f2d4d" strokeWidth="8" strokeLinecap="round" />
-        </svg>
-      </div>
-      <div>
-        <div className="text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-500">Vendora</div>
-        <div className="text-xl font-black tracking-tight text-slate-900">Admin Control Center</div>
-      </div>
-    </div>
-  )
+  return <BrandLogo compact />
 }
 
 export function AdminLoginPage() {
@@ -136,13 +115,7 @@ export function AdminLoginPage() {
 
         <section className="rounded-[32px] border border-slate-200 bg-white/95 p-5 shadow-[0_25px_80px_rgba(15,23,42,0.15)] backdrop-blur-sm sm:p-7 lg:p-8">
           <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#1f2d4d] text-xs font-black text-white shadow-lg shadow-slate-900/10">V</div>
-              <div>
-                <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-slate-500">Vendora</div>
-                <div className="text-lg font-bold text-slate-900">Admin sign in</div>
-              </div>
-            </div>
+            <BrandLogo compact />
             <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-700">
               <Sparkles className="h-3.5 w-3.5" /> Secure
             </div>
@@ -199,7 +172,12 @@ export function AdminLoginPage() {
                 <input type="checkbox" className="h-4 w-4 rounded border-slate-300 text-[#1f2d4d] focus:ring-[#f39a3d]" />
                 <span>Remember me</span>
               </label>
-              <button type="button" className="font-medium text-[#1f2d4d] transition hover:text-[#f39a3d]" aria-label="Reset password">
+              <button
+                type="button"
+                onClick={() => setError('Password reset is handled by a system administrator. Contact your administrator to reset this account.')}
+                className="font-medium text-[#1f2d4d] transition hover:text-[#f39a3d]"
+                aria-label="Get help resetting your password"
+              >
                 Forgot password?
               </button>
             </div>

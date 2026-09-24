@@ -19,14 +19,17 @@ export const api = axios.create({
   },
 })
 
+const SELLER_TOKEN_STORAGE_KEYS = ['access_token', 'accessToken'] as const
+const SELLER_USER_STORAGE_KEY = 'vendora_user'
+
 export function getSellerToken() {
-  return localStorage.getItem('accessToken') || localStorage.getItem('access_token') || null
+  return localStorage.getItem('access_token') || localStorage.getItem('accessToken') || null
 }
 
 export function isSellerSession() {
   if (!getSellerToken()) return false
   try {
-    const user = JSON.parse(localStorage.getItem('vendora_user') || 'null')
+    const user = JSON.parse(localStorage.getItem(SELLER_USER_STORAGE_KEY) || 'null')
     return String(user?.role || '').toUpperCase() === 'SELLER'
   } catch {
     return false
@@ -37,7 +40,7 @@ export function persistSellerSession(token: string, user?: SessionUser | null) {
   localStorage.setItem('access_token', token)
   localStorage.setItem('accessToken', token)
   if (user) {
-    localStorage.setItem('vendora_user', JSON.stringify(user))
+    localStorage.setItem(SELLER_USER_STORAGE_KEY, JSON.stringify(user))
   }
 }
 
@@ -53,9 +56,8 @@ function getSellerRefreshToken() {
 }
 
 export function clearSellerSession() {
-  localStorage.removeItem('accessToken')
-  localStorage.removeItem('access_token')
-  localStorage.removeItem('vendora_user')
+  SELLER_TOKEN_STORAGE_KEYS.forEach((key) => localStorage.removeItem(key))
+  localStorage.removeItem(SELLER_USER_STORAGE_KEY)
   localStorage.removeItem('vendora-auth')
   localStorage.removeItem('vendora_seller_refresh_token')
   localStorage.removeItem('refresh_token')

@@ -14,10 +14,11 @@ type CartItemInput = {
 export class CartService {
   constructor(private readonly prisma: PrismaService) {}
 
-  private recalculate(items: Array<{ price: number; quantity: number }>, couponCode?: string | null) {
+  private recalculate(items: Array<{ price: number; quantity: number; sellerId?: string | null }>, couponCode?: string | null) {
     const subtotal = items.reduce((sum, item) => sum + Number(item.price) * Number(item.quantity), 0);
     const tax = subtotal * 0.08;
-    const shipping = subtotal === 0 ? 0 : 12;
+    const sellerCount = new Set(items.map((item) => item.sellerId || 'marketplace')).size;
+    const shipping = subtotal === 0 ? 0 : sellerCount * 12;
     const discount = couponCode === 'SAVE10' ? subtotal * 0.1 : 0;
 
     return {
@@ -61,7 +62,7 @@ export class CartService {
 
   async getCart(userId: number | string, sessionId?: string) {
     const cart = await this.getOrCreateCart(userId, sessionId);
-    const totals = this.recalculate(cart.items, cart.couponCode);
+    const totals = this.recalculate(cart.items.map((item) => ({ ...item, price: Number(item.price) })), cart.couponCode);
 
     return {
       id: cart.id,
@@ -79,6 +80,67 @@ export class CartService {
       })),
       couponCode: cart.couponCode,
       ...totals,
+    };
+  }
+
+  async quote(userId: number | string) {
+    const cart = await this.getOrCreateCart(userId);
+    const listings = await Promise.all(
+      cart.items.map((item) => this.prisma.sellerProduct.findFirst({
+        where: {
+          id: item.productId,
+          status: 'ACTIVE',
+          shopId: { not: null },
+          seller: { status: 'ACTIVE' },
+          warehouseProduct: { status: 'PUBLISHED' },
+        },
+        include: {
+          warehouseProduct: { select: { stock: true, name: true } },
+          seller: { include: { user: { select: { name: true } } } },
+          shop: { select: { name: true, returnPolicy: true, shippingPolicy: true } },
+        },
+      })),
+    );
+
+    if (listings.some((listing) => !listing)) {
+      throw new BadRequestException('One or more cart items are no longer available.');
+    }
+
+    const stockError = listings.find((listing, index) => listing!.warehouseProduct.stock < cart.items[index].quantity);
+    if (stockError) {
+      throw new BadRequestException(`Not enough stock is available for ${stockError.warehouseProduct.name}.`);
+    }
+
+    const refreshedItems = cart.items.map((item, index) => {
+      const listing = listings[index]!;
+      return {
+        ...item,
+        name: listing.warehouseProduct.name,
+        price: Number(listing.sellingPrice),
+        sellerId: listing.sellerId,
+        shop: listing.shop?.name || listing.seller.user.name,
+      };
+    });
+
+    const totals = this.recalculate(refreshedItems, cart.couponCode);
+    const sellerGroups = [...new Map(refreshedItems.map((item, index) => {
+      const listing = listings[index]!;
+      const sellerId = listing.sellerId;
+      return [sellerId, {
+        sellerId,
+        sellerName: listing.shop?.name || listing.seller.user.name,
+        shipping: 12,
+        returnPolicy: listing.shop?.returnPolicy || null,
+        shippingPolicy: listing.shop?.shippingPolicy || null,
+      }];
+    })).values()];
+
+    return {
+      ...totals,
+      currency: 'USD',
+      items: refreshedItems,
+      sellerGroups,
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
     };
   }
 

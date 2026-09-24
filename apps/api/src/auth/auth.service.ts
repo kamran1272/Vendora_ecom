@@ -5,8 +5,9 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { compare, hash } from 'bcrypt';
+import { AUTH_TOKEN_TTL, UserRole } from '@vendora/shared';
 import { PrismaService } from '@/database/prisma.service';
-import { UsersService, UserRole } from '@/users/users.service';
+import { UsersService } from '@/users/users.service';
 
 @Injectable()
 export class AuthService {
@@ -21,6 +22,46 @@ export class AuthService {
     return safeUser;
   }
 
+  private normalizeEmail(email: string) {
+    if (!email || typeof email !== 'string') {
+      throw new BadRequestException('Email is required.');
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail) {
+      throw new BadRequestException('Email is required.');
+    }
+
+    return normalizedEmail;
+  }
+
+  private validatePassword(password: string, fieldName = 'Password') {
+    if (!password || typeof password !== 'string' || password.length < 8) {
+      throw new BadRequestException(`${fieldName} must be at least 8 characters long.`);
+    }
+  }
+
+  private async getActiveUserForAuth(email: string) {
+    const user = await this.prisma.user.findUnique({ where: { email } });
+    if (!user) {
+      throw new UnauthorizedException('Invalid email or password.');
+    }
+
+    if (user.deletedAt) {
+      throw new UnauthorizedException('This account has been deleted.');
+    }
+
+    if (user.isBlocked) {
+      throw new UnauthorizedException('This account has been blocked.');
+    }
+
+    if (user.status && user.status !== 'ACTIVE') {
+      throw new UnauthorizedException('This account is inactive.');
+    }
+
+    return user;
+  }
+
   private issueTokens(user: any) {
     const payload = {
       sub: user.id,
@@ -31,10 +72,10 @@ export class AuthService {
       isTwoFactorEnabled: Boolean(user.twoFactorEnabled),
     };
 
-    const accessToken = this.jwtService.sign(payload, { expiresIn: '15m' });
+    const accessToken = this.jwtService.sign(payload, { expiresIn: AUTH_TOKEN_TTL.ACCESS });
     const refreshToken = this.jwtService.sign(
       { ...payload, type: 'refresh' },
-      { expiresIn: '30d' },
+      { expiresIn: AUTH_TOKEN_TTL.REFRESH },
     );
 
     return {
@@ -55,7 +96,9 @@ export class AuthService {
       throw new BadRequestException('Name, email and password are required.');
     }
 
-    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedEmail = this.normalizeEmail(email);
+    this.validatePassword(password);
+
     const existingUser = await this.prisma.user.findUnique({
       where: { email: normalizedEmail },
     });
@@ -71,7 +114,7 @@ export class AuthService {
         name: name.trim(),
         email: normalizedEmail,
         password: hashedPassword,
-        role: 'CUSTOMER',
+        role: UserRole.CUSTOMER,
       },
       select: { id: true },
     });
@@ -89,14 +132,8 @@ export class AuthService {
       throw new BadRequestException('Email and password are required.');
     }
 
-    const normalizedEmail = email.trim().toLowerCase();
-    const user = await this.prisma.user.findUnique({
-      where: { email: normalizedEmail },
-    });
-
-    if (!user) {
-      throw new UnauthorizedException('Invalid email or password.');
-    }
+    const normalizedEmail = this.normalizeEmail(email);
+    const user = await this.getActiveUserForAuth(normalizedEmail);
 
     const isPasswordValid = await compare(password, user.password);
     if (!isPasswordValid) {
@@ -113,14 +150,8 @@ export class AuthService {
       throw new BadRequestException('Email and password are required.');
     }
 
-    const normalizedEmail = email.trim().toLowerCase();
-    const user = await this.prisma.user.findUnique({
-      where: { email: normalizedEmail },
-    });
-
-    if (!user) {
-      throw new UnauthorizedException('Invalid admin credentials.');
-    }
+    const normalizedEmail = this.normalizeEmail(email);
+    const user = await this.getActiveUserForAuth(normalizedEmail);
 
     const isPasswordValid = await compare(password, user.password);
     if (!isPasswordValid) {
@@ -166,19 +197,45 @@ export class AuthService {
       throw new BadRequestException('Refresh token is required.');
     }
 
-    const payload = this.jwtService.verify(refreshToken);
+    let payload: any;
+
+    try {
+      payload = this.jwtService.verify(refreshToken);
+    } catch (_error) {
+      throw new UnauthorizedException('Invalid refresh token.');
+    }
+
     if (payload.type !== 'refresh') {
       throw new UnauthorizedException('Invalid refresh token.');
     }
 
-    const user = await this.prisma.user.findUnique({
-      where: { id: String(payload.sub) },
-    });
+    const user = await this.getActiveUserForAuth((await this.prisma.user.findUnique({ where: { id: String(payload.sub) } }))?.email ?? '');
     if (!user) {
       throw new UnauthorizedException('User no longer exists.');
     }
 
     return this.issueTokens(user);
+  }
+
+  async logout(userId?: string, refreshToken?: string) {
+    if (userId) {
+      await this.prisma.user
+        .findUnique({ where: { id: String(userId) } })
+        .catch(() => null);
+    }
+
+    if (refreshToken) {
+      try {
+        this.jwtService.verify(refreshToken);
+      } catch (_error) {
+        // Intentionally ignore invalid refresh tokens on logout and return a clean success response.
+      }
+    }
+
+    return {
+      message: 'Logged out successfully.',
+      success: true,
+    };
   }
 
   async verifyEmail(userId: number | string) {
@@ -201,7 +258,7 @@ export class AuthService {
   }
 
   async forgotPassword(email: string) {
-    const normalizedEmail = email?.trim().toLowerCase();
+    const normalizedEmail = this.normalizeEmail(email);
     const user = normalizedEmail
       ? await this.prisma.user.findUnique({
           where: { email: normalizedEmail },
@@ -236,6 +293,8 @@ export class AuthService {
     if (!token || !newPassword) {
       throw new BadRequestException('Reset token and new password are required.');
     }
+
+    this.validatePassword(newPassword, 'New password');
 
     const userRecords = await this.prisma.user.findMany({
       where: {
@@ -277,6 +336,18 @@ export class AuthService {
     });
     if (!user) {
       throw new BadRequestException('User not found.');
+    }
+
+    if (user.deletedAt) {
+      throw new UnauthorizedException('This account has been deleted.');
+    }
+
+    if (user.isBlocked) {
+      throw new UnauthorizedException('This account has been blocked.');
+    }
+
+    if (user.status && user.status !== 'ACTIVE') {
+      throw new UnauthorizedException('This account is inactive.');
     }
 
     return this.sanitizeUser(user);

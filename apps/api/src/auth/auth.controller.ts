@@ -8,6 +8,7 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RolesGuard } from './guards/roles.guard';
@@ -18,16 +19,25 @@ import { UserRole } from '@/users/users.service';
 export class AuthController {
   constructor(private authService: AuthService) {}
 
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('register')
   async register(@Body() credentials: any) {
     return this.authService.register(credentials);
   }
 
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Post('login')
   async login(@Body() credentials: any) {
     return this.authService.login(credentials);
   }
 
+  @UseGuards(JwtAuthGuard)
+  @Post('logout')
+  async logout(@Req() req: any, @Body() body?: { refreshToken?: string }) {
+    return this.authService.logout(req.user?.userId, body?.refreshToken);
+  }
+
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Post('admin/login')
   async adminLogin(@Body() credentials: any) {
     return this.authService.adminLogin(credentials);
@@ -38,6 +48,7 @@ export class AuthController {
     return this.authService.googleLogin(googleProfile);
   }
 
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Post('refresh')
   async refresh(@Body() body: { refreshToken: string }) {
     return this.authService.refreshToken(body.refreshToken);
@@ -48,14 +59,22 @@ export class AuthController {
     return this.authService.verifyEmail(body.userId);
   }
 
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Post('forgot-password')
   async forgotPassword(@Body() body: { email: string }) {
     return this.authService.forgotPassword(body.email);
   }
 
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Post('reset-password')
   async resetPassword(@Body() body: { token: string; newPassword: string }) {
     return this.authService.resetPassword(body.token, body.newPassword);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('me')
+  async getMe(@Req() req: any) {
+    return this.authService.getProfile(req.user.userId);
   }
 
   @UseGuards(JwtAuthGuard)

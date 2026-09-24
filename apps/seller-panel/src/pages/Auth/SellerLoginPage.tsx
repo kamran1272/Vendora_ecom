@@ -1,6 +1,7 @@
 import { FormEvent, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { api, persistSellerRefreshToken, persistSellerSession } from '../../services/api'
+import { BrandLogo } from '../../components/BrandLogo'
 
 type LoginResponse = {
   accessToken?: string
@@ -40,7 +41,7 @@ export function SellerLoginPage() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#edf2f8] p-4">
       <section className="w-full max-w-md rounded-lg border border-slate-200 bg-white p-8 shadow-sm">
-        <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Vendora seller panel</div>
+        <BrandLogo compact className="mb-4" />
         <h1 className="mt-2 text-2xl font-bold text-slate-900">Sign in to your shop</h1>
         <p className="mt-2 text-sm text-slate-500">Use your seller account credentials to continue.</p>
 

@@ -1,13 +1,8 @@
 import { Injectable } from '@nestjs/common';
+import { UserRole } from '@vendora/shared';
 import { PrismaService } from '@/database/prisma.service';
 
-export enum UserRole {
-  SUPER_ADMIN = 'SUPER_ADMIN',
-  ADMIN = 'ADMIN',
-  SELLER = 'SELLER',
-  CUSTOMER = 'CUSTOMER',
-  STAFF = 'STAFF',
-}
+export { UserRole } from '@vendora/shared';
 
 @Injectable()
 export class UsersService {

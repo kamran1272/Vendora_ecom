@@ -11,6 +11,7 @@ export type MarketplaceProduct = {
   price: number
   oldPrice?: number
   rating: number
+  reviewCount?: number
   popularity: number
   inStock: boolean
   attributes: string[]

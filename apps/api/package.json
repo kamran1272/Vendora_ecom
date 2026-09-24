@@ -5,11 +5,9 @@
   "description": "Vendora API - NestJS Backend",
   "type": "commonjs",
   "scripts": {
-    "predev": "prisma generate --schema prisma/schema.prisma && prisma migrate deploy --schema prisma/schema.prisma",
     "dev": "nest start --watch",
-    "prebuild": "prisma generate --schema prisma/schema.prisma && prisma migrate deploy --schema prisma/schema.prisma",
+    "prebuild": "npm run db:prepare",
     "build": "nest build && tsc-alias -p tsconfig.json && echo 'Build complete'",
-    "prestart": "prisma generate --schema prisma/schema.prisma && prisma migrate deploy --schema prisma/schema.prisma",
     "start": "node dist/main.js",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
@@ -21,7 +19,8 @@
     "migration:revert": "typeorm migration:revert -d src/database/config/typeorm-config.ts",
     "db:repair": "node scripts/repair-dev-db.mjs",
     "db:baseline": "node scripts/baseline-dev-db.mjs",
-    "seed:run": "tsx src/database/seeds/seed.ts"
+    "seed:run": "tsx src/database/seeds/seed.ts",
+    "db:prepare": "prisma generate --schema prisma/schema.prisma && prisma migrate deploy --schema prisma/schema.prisma"
   },
   "dependencies": {
     "@nestjs/common": "^10.2.0",

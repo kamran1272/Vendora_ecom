@@ -23,10 +23,16 @@ export function ProductGallery({ title, images }: ProductGalleryProps) {
   return (
     <div className="rounded-[2rem] border border-slate-200 bg-white p-4 shadow-sm">
       <div className="relative overflow-hidden rounded-[1.5rem] bg-gradient-to-br from-slate-200 via-slate-100 to-slate-50 p-6">
-        <div className={`relative h-[min(420px,70vw)] min-h-64 rounded-[1.2rem] bg-slate-100 transition-transform duration-300 ${zoomed ? 'scale-125 cursor-zoom-out' : 'cursor-zoom-in'}`} onClick={() => setZoomed((value) => !value)}>
+        <button
+          type="button"
+          aria-label={zoomed ? 'Zoom out of product image' : 'Zoom in on product image'}
+          aria-pressed={zoomed}
+          onClick={() => setZoomed((value) => !value)}
+          className={`relative block w-full h-[min(420px,70vw)] min-h-64 rounded-[1.2rem] bg-slate-100 text-left transition-transform duration-300 ${zoomed ? 'scale-125 cursor-zoom-out' : 'cursor-zoom-in'}`}
+        >
           {imageLoading && !failedImages.has(activeImage) && <div className="absolute inset-0 animate-pulse bg-slate-200" aria-label="Loading product image" />}
           {availableImages[activeImage] && !failedImages.has(activeImage) ? <img src={availableImages[activeImage]} alt={title} loading={activeImage === 0 ? 'eager' : 'lazy'} onLoad={() => setImageLoading(false)} onError={() => { setImageLoading(false); setFailedImages((current) => new Set(current).add(activeImage)) }} className={`h-full w-full rounded-[1.2rem] object-contain transition-opacity ${imageLoading ? 'opacity-0' : 'opacity-100'}`} /> : <div className="flex h-full items-center justify-center text-sm font-semibold uppercase tracking-[0.16em] text-slate-400">Image unavailable</div>}
-        </div>
+        </button>
         {imageCount > 1 && <>
           <button type="button" aria-label="Previous product image" onClick={() => moveImage(-1)} className="absolute left-8 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-xl text-slate-700 shadow-sm">‹</button>
           <button type="button" aria-label="Next product image" onClick={() => moveImage(1)} className="absolute right-8 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-xl text-slate-700 shadow-sm">›</button>

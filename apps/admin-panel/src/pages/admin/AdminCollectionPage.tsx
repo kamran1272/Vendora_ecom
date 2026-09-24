@@ -63,6 +63,7 @@ export function AdminCollectionPage({
   const [items, setItems] = useState<Record<string, unknown>[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [rowActionKey, setRowActionKey] = useState<string | null>(null)
 
   const load = async () => {
     try {
@@ -86,11 +87,11 @@ export function AdminCollectionPage({
   return (
     <AdminLayout>
       <div className="space-y-6">
-        <header className="rounded-[26px] border border-slate-200/80 bg-white p-6 shadow-[0_16px_40px_rgba(15,23,42,0.05)]">
+        <header className="admin-page-header">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.2em] text-indigo-600">Marketplace management</p>
-              <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950 sm:text-3xl">{title}</h2>
+                <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950 sm:text-3xl">{title}</h1>
               <p className="mt-2 text-slate-600">{description}</p>
             </div>
 
@@ -128,7 +129,7 @@ export function AdminCollectionPage({
             <AdminEmptyState title={`No ${title.toLowerCase()} found`} message={emptyMessage} />
           ) : (
             <div className="overflow-x-auto overscroll-x-contain">
-              <table className="min-w-[980px] text-left text-sm text-slate-700">
+              <table className="admin-table min-w-[980px] text-left text-sm text-slate-700">
                 <thead className="bg-slate-50 text-slate-600">
                   <tr>
                     {columns.map((column) => (
@@ -157,8 +158,8 @@ export function AdminCollectionPage({
                       })}
 
                       {rowActions && rowActions.length > 0 ? (
-                        <td className="border-l border-slate-100 px-4 py-3 align-middle">
-                          <div className="flex flex-wrap gap-2">
+                        <td className="admin-actions-cell border-l border-slate-100 px-4 py-3 align-middle">
+                          <div className="admin-row-actions">
                             {rowActions.map((action) => {
                               const isDisabled = action.disabled ? action.disabled(row) : false
 
@@ -166,9 +167,15 @@ export function AdminCollectionPage({
                                 <button
                                   key={`${String(row.id ?? index)}-${action.label}`}
                                   type="button"
-                                  onClick={() => void action.onClick(row)}
-                                  disabled={isDisabled}
-                                  className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${
+                                  onClick={() => {
+                                    const key = `${String(row.id ?? index)}-${action.label}`
+                                    setRowActionKey(key)
+                                    void Promise.resolve(action.onClick(row))
+                                      .catch((actionError) => setError(actionError instanceof Error ? actionError.message : `Unable to ${action.label.toLowerCase()}.`))
+                                      .finally(() => setRowActionKey(null))
+                                  }}
+                                  disabled={isDisabled || rowActionKey !== null}
+                                  className={`admin-action-button rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${
                                     action.tone === 'danger'
                                       ? 'bg-rose-100 text-rose-700 hover:bg-rose-200 disabled:cursor-not-allowed disabled:opacity-60'
                                       : action.tone === 'primary'
@@ -176,7 +183,7 @@ export function AdminCollectionPage({
                                         : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60'
                                   }`}
                                 >
-                                  {action.label}
+                                  {rowActionKey === `${String(row.id ?? index)}-${action.label}` ? 'Working…' : action.label}
                                 </button>
                               )
                             })}
@@ -240,11 +247,11 @@ export function AdminDetailPage({
   return (
     <AdminLayout>
       <div className="space-y-6">
-        <header className="rounded-[26px] bg-white p-6 shadow-sm ring-1 ring-slate-200">
+        <header className="admin-page-header">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <p className="text-sm uppercase tracking-[0.2em] text-slate-500">Marketplace detail</p>
-              <h2 className="mt-2 text-3xl font-semibold text-slate-900">{title}</h2>
+              <h1 className="mt-2 text-3xl font-semibold text-slate-900">{title}</h1>
               <p className="mt-2 text-slate-600">{description}</p>
             </div>
 

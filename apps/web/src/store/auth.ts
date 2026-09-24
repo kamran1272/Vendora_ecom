@@ -9,6 +9,42 @@ export type AuthUser = {
   [key: string]: unknown
 }
 
+const TOKEN_STORAGE_KEYS = ['access_token', 'accessToken'] as const
+const USER_STORAGE_KEY = 'vendora_user'
+
+export function getStoredAuthToken() {
+  if (typeof window === 'undefined') return null
+  return localStorage.getItem('access_token') || localStorage.getItem('accessToken') || null
+}
+
+export function setStoredAuthToken(token: string | null) {
+  if (typeof window === 'undefined') return
+
+  if (token) {
+    localStorage.setItem('access_token', token)
+    localStorage.setItem('accessToken', token)
+    return
+  }
+
+  TOKEN_STORAGE_KEYS.forEach((key) => localStorage.removeItem(key))
+}
+
+export function setStoredUser(user: AuthUser | null) {
+  if (typeof window === 'undefined') return
+
+  if (user) {
+    localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user))
+    return
+  }
+
+  localStorage.removeItem(USER_STORAGE_KEY)
+}
+
+export function clearStoredAuthSession() {
+  setStoredAuthToken(null)
+  setStoredUser(null)
+}
+
 interface AuthState {
   user: AuthUser | null
   token: string | null
@@ -26,21 +62,28 @@ export const useAuth = create<AuthState>()(
       isAuthenticated: false,
       login: (data) => {
         const token = data.token ?? data.accessToken ?? null
+        const user = data.user ?? null
+
+        if (token) {
+          setStoredAuthToken(token)
+        }
+        if (user) {
+          setStoredUser(user)
+        }
+
         set({
-          user: data.user ?? null,
+          user,
           token,
           isAuthenticated: Boolean(token),
         })
       },
       logout: () => {
-        localStorage.removeItem('access_token')
-        localStorage.removeItem('accessToken')
-        localStorage.removeItem('vendora_user')
+        clearStoredAuthSession()
         set({ user: null, token: null, isAuthenticated: false })
       },
       hydrate: () => {
-        const token = localStorage.getItem('access_token') || localStorage.getItem('accessToken')
-        const rawUser = localStorage.getItem('vendora_user')
+        const token = getStoredAuthToken()
+        const rawUser = localStorage.getItem(USER_STORAGE_KEY)
 
         set({
           token,

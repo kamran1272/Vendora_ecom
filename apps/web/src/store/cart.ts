@@ -11,6 +11,7 @@ export type CartLineItem = {
   imageUrl?: string
   variant?: string
   stock?: number
+  sellerId?: string
   quantity: number
 }
 
@@ -21,6 +22,15 @@ export type CartSummary = {
   discount: number
   total: number
   couponCode?: string | null
+  currency?: string
+  expiresAt?: string
+  sellerGroups?: Array<{
+    sellerId: string
+    sellerName: string
+    shipping: number
+    returnPolicy?: string | null
+    shippingPolicy?: string | null
+  }>
 }
 
 type CartApiItem = {
@@ -49,6 +59,9 @@ type CartApiResponse = {
   total?: number
   couponCode?: string | null
   userId?: string | null
+  currency?: string
+  expiresAt?: string
+  sellerGroups?: CartSummary['sellerGroups']
 }
 
 function normalizeCartItems(items: CartApiItem[] = []): CartLineItem[] {
@@ -62,6 +75,7 @@ function normalizeCartItems(items: CartApiItem[] = []): CartLineItem[] {
     imageUrl: item.imageUrl || item.image || undefined,
     variant: item.variant || undefined,
     stock: item.stock || undefined,
+    sellerId: item.sellerId || undefined,
     quantity: Number(item.quantity || 1),
   })).forEach((item) => {
     const key = `${item.id}::${item.variant || ''}`
@@ -80,13 +94,13 @@ function normalizeCartResponse(response: CartApiResponse) {
   const items = normalizeCartItems(response.items || [])
   const subtotal = Number(response.subtotal ?? getCartSubtotal(items))
   const tax = Number(response.tax ?? 0)
-  const shipping = Number(response.shipping ?? (subtotal > 0 ? 12 : 0))
+  const shipping = Number(response.shipping ?? 0)
   const discount = Number(response.discount ?? 0)
   const total = Number(response.total ?? subtotal + tax + shipping - discount)
 
   return {
     items,
-    summary: { subtotal, tax, shipping, discount, total, couponCode: response.couponCode },
+    summary: { subtotal, tax, shipping, discount, total, couponCode: response.couponCode, currency: response.currency, expiresAt: response.expiresAt, sellerGroups: response.sellerGroups },
   }
 }
 
@@ -94,6 +108,7 @@ interface CartState {
   items: CartLineItem[]
   summary: CartSummary | null
   loadForUser: (userId?: string | number | null) => Promise<CartLineItem[]>
+  refreshQuote: (userId: string | number) => Promise<CartSummary>
   addItem: (item: Omit<CartLineItem, 'quantity'> & { quantity?: number }) => Promise<CartLineItem[] | void>
   updateQuantity: (id: string, quantity: number) => Promise<CartLineItem[] | void>
   removeItem: (id: string) => Promise<CartLineItem[] | void>
@@ -115,6 +130,14 @@ export const useCartStore = create<CartState>()(
         const normalized = normalizeCartResponse(response)
         set(normalized)
         return normalized.items
+      },
+      refreshQuote: async (userId) => {
+        const response = await apiRequest<CartApiResponse>(`/cart/${userId}/quote`, {
+          method: 'POST',
+        })
+        const normalized = normalizeCartResponse(response)
+        set(normalized)
+        return normalized.summary
       },
       addItem: async (item) => {
         const user = useAuth.getState().user

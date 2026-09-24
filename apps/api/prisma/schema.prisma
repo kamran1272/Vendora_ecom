@@ -90,6 +90,7 @@ model Seller {
   refundRequests        RefundRequest[]
   affiliateProfile      AffiliateProfile?
   uploadedFiles         UploadedFile[]
+  wallet                SellerWallet?
 
   @@map("sellers")
 }
@@ -133,7 +134,7 @@ model Review {
   productId          String?
   warehouseProductId String?
   sellerId           String?
-  sellerMargin      Float            @default(0)
+  sellerMargin      Decimal          @default(0)
   rating             Int
   title              String?
   text               String
@@ -184,7 +185,7 @@ model ReviewReply {
 model Withdrawal {
   id             String    @id @default(uuid())
   sellerId       String
-  amount         Float
+  amount         Decimal
   method         String    @default("BANK_TRANSFER")
   accountDetails String    @default("")
   status         String    @default("PENDING")
@@ -274,11 +275,11 @@ model WarehouseProduct {
   category            String?
   subcategory         String?
   brand               String?
-  basePrice           Float
-  salePrice           Float?
+  basePrice           Decimal
+  salePrice           Decimal?
   rating              Float?
   discountPercentage  Float?
-  sellerMargin        Float           @default(0)
+  sellerMargin        Decimal         @default(0)
   stock               Int             @default(0)
   minimumOrder        Int             @default(1)
   maximumOrder        Int             @default(0)
@@ -324,8 +325,8 @@ model SellerProduct {
   sellerId           String
   shopId             String?
   warehouseProductId String
-  sellingPrice       Float
-  sellerMargin       Float            @default(0)
+  sellingPrice       Decimal
+  sellerMargin       Decimal          @default(0)
   status             String           @default("ACTIVE")
   createdAt          DateTime         @default(now())
   updatedAt          DateTime         @updatedAt
@@ -342,7 +343,7 @@ model SellerProduct {
 model SubscriptionPlan {
   id               String                       @id @default(uuid())
   name             String                       @unique
-  price            Float                        @default(0)
+  price            Decimal                      @default(0)
   productLimit     Int
   orderLimit       Int                          @default(-1)
   storageLimit     Int                          @default(-1)
@@ -365,7 +366,7 @@ model SellerPackage {
   id           String                  @id @default(uuid())
   name         String                  @unique
   slug         String                  @unique
-  price        Float                   @default(0)
+  price        Decimal                 @default(0)
   trafficLimit Int                     @default(-1)
   duration     Int                     @default(30)
   description  String?
@@ -383,7 +384,7 @@ model SellerPackagePurchase {
   id            String        @id @default(uuid())
   sellerId      String
   packageId     String
-  amount        Float         @default(0)
+  amount        Decimal       @default(0)
   paymentMethod String        @default("MANUAL")
   startsAt      DateTime      @default(now())
   expiresAt     DateTime?
@@ -415,7 +416,7 @@ model SellerSubscriptionPurchase {
   id            String           @id @default(uuid())
   sellerId      String
   planId        String
-  amount        Float
+  amount        Decimal
   paymentMethod String           @default("MANUAL")
   status        String           @default("COMPLETED")
   action        String           @default("PURCHASE")
@@ -465,7 +466,7 @@ model AffiliateCommission {
   affiliateId String
   referralId  String?
   orderId     String?
-  amount      Float
+  amount      Decimal
   status      String             @default("PENDING")
   createdAt   DateTime           @default(now())
   paidAt      DateTime?
@@ -512,7 +513,7 @@ model CartItem {
   warehouseProductId String?
   sellerId           String?
   name               String
-  price              Float
+  price              Decimal
   quantity           Int      @default(1)
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
@@ -528,11 +529,12 @@ model Order {
   userId          String
   user            User                 @relation(fields: [userId], references: [id], onDelete: Restrict)
   status          String               @default("PENDING")
-  subtotal        Float                @default(0)
-  tax             Float                @default(0)
-  shipping        Float                @default(0)
-  discount        Float                @default(0)
-  total           Float                @default(0)
+  subtotal        Decimal              @default(0)
+  tax             Decimal              @default(0)
+  shipping        Decimal              @default(0)
+  discount        Decimal              @default(0)
+  total           Decimal              @default(0)
+  currency        String               @default("USD")
   paymentMethod   String               @default("stripe")
   shippingAddress String?
   couponCode      String?
@@ -558,7 +560,7 @@ model OrderItem {
   sellerId           String?
   name               String
   quantity           Int      @default(1)
-  price              Float
+  price              Decimal
   createdAt          DateTime @default(now())
   order              Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
@@ -570,9 +572,10 @@ model OrderItem {
 model Payment {
   id                String          @id @default(uuid())
   orderId           String          @unique
-  amount            Float
-  fee               Float           @default(0)
-  commission        Float           @default(0)
+  amount            Decimal
+  fee               Decimal         @default(0)
+  commission        Decimal         @default(0)
+  currency          String          @default("USD")
   method            String          @default("stripe")
   status            String          @default("PENDING")
   gateway           String          @default("stripe")
@@ -608,7 +611,7 @@ model RefundRequest {
   customerId  String
   sellerId    String?
   paymentId   String?
-  amount      Float
+  amount      Decimal
   reason      String
   sellerNote  String?
   status      String    @default("REQUESTED")
@@ -631,8 +634,8 @@ model Commission {
   sellerId  String
   orderId   String?   @unique
   paymentId String?
-  amount    Float
-  rate      Float     @default(0)
+  amount    Decimal
+  rate      Decimal   @default(0)
   status    String    @default("PENDING")
   createdAt DateTime  @default(now())
   paidAt    DateTime?
@@ -646,6 +649,42 @@ model Commission {
   @@index([orderId])
   @@index([status, createdAt])
   @@map("commissions")
+}
+
+model SellerWallet {
+  id             String   @id @default(uuid())
+  sellerId       String   @unique
+  balance        Decimal  @default(0)
+  totalEarnings  Decimal  @default(0)
+  totalWithdrawn Decimal  @default(0)
+  pendingBalance Decimal  @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  seller         Seller   @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  transactions   WalletTransaction[]
+
+  @@map("seller_wallets")
+}
+
+model WalletTransaction {
+  id             String   @id @default(uuid())
+  sellerId       String
+  type           String
+  amount         Decimal
+  status         String   @default("PENDING")
+  description    String?
+  referenceId    String?
+  referenceOrderId String?
+  balanceBefore  Decimal?
+  balanceAfter   Decimal?
+  createdAt      DateTime @default(now())
+  processedAt    DateTime?
+  wallet         SellerWallet @relation(fields: [sellerId], references: [sellerId], onDelete: Cascade)
+
+  @@index([sellerId, createdAt])
+  @@index([sellerId, status])
+  @@index([referenceOrderId])
+  @@map("wallet_transactions")
 }
 
 model ProductQuery {

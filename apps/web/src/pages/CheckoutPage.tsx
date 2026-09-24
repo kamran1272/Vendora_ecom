@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { PageShell } from '@/components/common/PageShell'
 import { Button, Card, OrderStatusBadge } from '@/components/ui/DesignSystem'
-import { getCartSubtotal, useCartStore } from '@/store/cart'
+import { useCartStore } from '@/store/cart'
 import { useAuth } from '@/store/auth'
 import { useToastStore } from '@/store/toast'
 import { formatCurrency } from '@/utils/format'
@@ -23,6 +23,7 @@ export function CheckoutPage() {
   const { user, isAuthenticated } = useAuth()
   const items = useCartStore((state) => state.items)
   const summary = useCartStore((state) => state.summary)
+  const refreshQuote = useCartStore((state) => state.refreshQuote)
   const checkout = useCartStore((state) => state.checkout)
   const [step, setStep] = useState(0)
   const [paymentMethod, setPaymentMethod] = useState('stripe')
@@ -37,14 +38,22 @@ export function CheckoutPage() {
   }, [isAuthenticated, navigate, user?.id])
 
   useEffect(() => {
+    if (!user?.id || !items.length) return
+    setLoading(true)
+    refreshQuote(String(user.id))
+      .catch((requestError) => setError(requestError instanceof Error ? requestError.message : 'Unable to calculate the current order total.'))
+      .finally(() => setLoading(false))
+  }, [items.length, refreshQuote, user?.id])
+
+  useEffect(() => {
     setAddress((current) => ({ ...current, fullName: current.fullName || user?.name || '' }))
   }, [user?.name])
 
-  const subtotal = getCartSubtotal(items)
-  const shipping = summary?.shipping ?? (subtotal > 0 ? 12 : 0)
-  const tax = summary?.tax ?? subtotal * 0.08
+  const subtotal = summary?.subtotal ?? 0
+  const shipping = summary?.shipping ?? 0
+  const tax = summary?.tax ?? 0
   const discount = summary?.discount ?? 0
-  const total = summary?.total ?? subtotal + shipping + tax - discount
+  const total = summary?.total ?? 0
   const addressComplete = Object.values(address).every((value) => value.trim())
 
   const validateStep = () => {
@@ -73,6 +82,7 @@ export function CheckoutPage() {
     setLoading(true)
     setError(null)
     try {
+      await refreshQuote(String(user.id))
       const result = await checkout(String(user.id), {
         paymentMethod,
         shippingAddress: address,

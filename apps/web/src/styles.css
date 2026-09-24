@@ -125,6 +125,18 @@ a.btn[aria-disabled='true'] {
   transform: none;
 }
 
+button,
+a[role='button'],
+.btn {
+  min-height: 2.5rem;
+}
+
+button:not(:disabled):hover,
+a[role='button']:hover,
+.btn:hover {
+  box-shadow: 0 8px 18px rgb(31 45 77 / 0.12);
+}
+
 @keyframes toast-enter {
   from { opacity: 0; transform: translateY(-6px) scale(0.98); }
   to { opacity: 1; transform: translateY(0) scale(1); }

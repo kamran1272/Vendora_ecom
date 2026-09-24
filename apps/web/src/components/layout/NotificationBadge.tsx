@@ -1,14 +1,23 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { apiRequest, getAuthToken } from '@/services/api'
+import { useAuth } from '@/store/auth'
 
 export function NotificationBadge() {
   const [count, setCount] = useState(0)
+  const isAuthenticated = useAuth((state) => state.isAuthenticated)
   useEffect(() => {
-    const token = getAuthToken()
-    if (!token) return
+    if (!isAuthenticated || !getAuthToken()) {
+      setCount(0)
+      return
+    }
     let active = true
-    const load = () => apiRequest<{ count?: number }>('/notifications/unread-count').then((data) => { if (active) setCount(Number(data.count || 0)) }).catch(() => undefined)
+    const load = () => {
+      if (!getAuthToken()) return
+      apiRequest<{ count?: number }>('/notifications/unread-count')
+        .then((data) => { if (active) setCount(Number(data.count || 0)) })
+        .catch(() => undefined)
+    }
     load()
     const interval = window.setInterval(load, 30000)
     return () => { active = false; window.clearInterval(interval) }

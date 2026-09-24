@@ -57,7 +57,7 @@ export function Button({
 }
 
 export function Card({ children, className = '' }: { children: ReactNode; className?: string }) {
-  return <section className={`rounded-2xl border border-slate-200 bg-white shadow-sm ${className}`}>{children}</section>
+  return <section className={`rounded-2xl border border-slate-200 bg-white shadow-[0_12px_30px_rgba(31,45,77,0.05)] ${className}`}>{children}</section>
 }
 
 export function Badge({ children, tone = 'neutral' }: { children: ReactNode; tone?: 'neutral' | 'accent' | 'success' | 'danger' }) {
@@ -196,9 +196,9 @@ export function ProductGrid({ children, className = '' }: { children: ReactNode;
 
 export function CategoryCard({ name, description, href }: { name: string; description?: string; href: string }) {
   return (
-    <Link to={href} className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:border-brand-300 hover:shadow-md">
-      <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-50 text-brand-600" aria-hidden="true">{name.slice(0, 1)}</div>
-      <h3 className="font-bold text-slate-900 group-hover:text-brand-600">{name}</h3>
+    <Link to={href} className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_10px_26px_rgba(31,45,77,0.04)] transition hover:-translate-y-1 hover:border-brand-300 hover:shadow-lg">
+      <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-50 to-orange-50 text-sm font-black uppercase text-brand-600" aria-hidden="true">{name.slice(0, 1)}</div>
+      <h3 className="truncate font-bold text-slate-900 group-hover:text-brand-600">{name}</h3>
       {description && <p className="mt-2 text-sm text-slate-500">{description}</p>}
     </Link>
   )
@@ -206,9 +206,9 @@ export function CategoryCard({ name, description, href }: { name: string; descri
 
 export function BrandCard({ name, description }: { name: string; description?: string }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 text-center shadow-sm">
-      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-slate-100 font-black text-brand-600">{name.slice(0, 2).toUpperCase()}</div>
-      <h3 className="mt-3 font-bold text-slate-900">{name}</h3>
+    <div className="group rounded-2xl border border-slate-200 bg-white p-5 text-center shadow-[0_10px_26px_rgba(31,45,77,0.04)] transition hover:-translate-y-1 hover:border-orange-200 hover:shadow-lg">
+      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-slate-100 font-black text-brand-600 transition group-hover:bg-orange-50">{name.slice(0, 2).toUpperCase()}</div>
+      <h3 className="mt-3 truncate font-bold text-slate-900">{name}</h3>
       {description && <p className="mt-1 text-sm text-slate-500">{description}</p>}
     </div>
   )

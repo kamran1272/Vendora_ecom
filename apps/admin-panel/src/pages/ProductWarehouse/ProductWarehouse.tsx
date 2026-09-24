@@ -281,7 +281,7 @@ export function ProductWarehouse() {
 	return (
 		<AdminLayout>
 			<div className="space-y-6 p-1 sm:p-2 lg:p-3">
-				<header className="rounded-[26px] border border-slate-200/80 bg-white p-6 shadow-[0_16px_40px_rgba(15,23,42,0.05)]">
+				<header className="admin-page-header">
 					<div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
 						<div>
 							<p className="text-xs font-bold uppercase tracking-[0.2em] text-indigo-600">Catalog operations</p>
@@ -308,8 +308,8 @@ export function ProductWarehouse() {
 					<div className="rounded-[20px] border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">{error}</div>
 				) : null}
 
-				<div className="grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
-					<form onSubmit={createProduct} className="rounded-[26px] border border-slate-200/80 bg-white p-5 shadow-[0_14px_32px_rgba(15,23,42,0.04)]">
+				<div className="grid items-start gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
+					<form onSubmit={createProduct} className="admin-card self-start p-5 xl:sticky xl:top-24">
 						<div className="mb-5">
 							<h2 className="text-xl font-semibold text-slate-900">Create warehouse product</h2>
 							<p className="mt-1 text-sm text-slate-500">Add catalog items that sellers can later select.</p>
@@ -341,7 +341,7 @@ export function ProductWarehouse() {
 						</button>
 					</form>
 
-					<section className="rounded-[26px] border border-slate-200/80 bg-white p-5 shadow-[0_14px_32px_rgba(15,23,42,0.04)]">
+					<section className="admin-card min-w-0 p-5">
 						<div className="mb-5 flex items-center justify-between gap-3">
 							<div>
 								<h2 className="text-xl font-semibold text-slate-900">Warehouse catalog</h2>
@@ -362,7 +362,7 @@ export function ProductWarehouse() {
 						</div>
 
 						{loading ? <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{Array.from({ length: 6 }).map((_, index) => <div key={index} className="animate-pulse rounded-2xl border border-slate-200 p-4"><div className="h-32 rounded-xl bg-slate-100" /><div className="mt-4 h-4 w-3/4 rounded bg-slate-100" /><div className="mt-2 h-3 w-1/2 rounded bg-slate-100" /><div className="mt-4 h-9 rounded-lg bg-slate-100" /></div>)}</div> : <div className="overflow-x-auto">
-							<table className="min-w-full text-left text-sm text-slate-700">
+							<table className="warehouse-catalog-table text-left text-sm text-slate-700">
 								<thead className="border-b border-slate-200 bg-slate-50 text-slate-600">
 									<tr>
 										<th className="px-4 py-3 font-semibold">Product</th>
@@ -398,8 +398,8 @@ export function ProductWarehouse() {
 													</span>
 												</td>
 													<td className="px-4 py-3 text-xs text-slate-500">{product.importedAt ? new Date(product.importedAt).toLocaleDateString() : '—'}</td>
-												<td className="px-4 py-3">
-													<div className="flex flex-wrap gap-2">
+												<td className="warehouse-product-actions-cell px-4 py-3 align-middle">
+													<div className="warehouse-product-actions">
 															<button type="button" onClick={() => setPreviewProduct(product)} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700"><Eye size={14} /> Preview</button>
 															<button type="button" onClick={() => setEditingProduct(product)} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700"><Pencil size={14} /> Edit</button>
 																	{product.sourceId && product.externalProductId && product.sourceId !== 'manual' ? <button type="button" onClick={() => void resync(product)} className="inline-flex items-center gap-1 rounded-lg border border-sky-200 bg-sky-50 px-2.5 py-1.5 text-xs font-medium text-sky-700"><RefreshCw size={14} /> Re-sync</button> : null}

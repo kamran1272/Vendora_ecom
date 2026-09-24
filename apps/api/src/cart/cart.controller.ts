@@ -12,6 +12,11 @@ export class CartController {
     return this.cartService.getCart(req.user.userId);
   }
 
+  @Post(':userId/quote')
+  quote(@Req() req: any) {
+    return this.cartService.quote(req.user.userId);
+  }
+
   @Post(':userId/items')
   addItem(@Req() req: any, @Body() data: any) {
     return this.cartService.addItem(req.user.userId, {
