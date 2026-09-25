@@ -20,9 +20,9 @@ Vendora deploys as four services:
 4. Set `ADMIN_INITIAL_EMAIL` and `ADMIN_INITIAL_PASSWORD` to one-time administrator credentials.
 5. Deploy and verify `https://your-api.onrender.com/api/health`.
 
-The API currently uses SQLite migrations. The Render blueprint therefore includes a persistent disk. A paid Render plan is required for that disk. Moving to Render Postgres requires converting the existing SQLite Prisma migration history before changing the Prisma provider.
+The blueprint builds the shared package before the API and starts `apps/api/dist/main.js` directly. This ensures the production process uses the NestJS application that registers `/api` and `/api/health`.
 
-The Render build first compiles `packages/shared`, then builds the API. The start command runs `apps/api/dist/main.js` directly, and the expected health URL is `https://your-api.onrender.com/api/health`.
+The API currently uses SQLite migrations. The Render blueprint therefore includes a persistent disk. A paid Render plan is required for that disk. Moving to Render Postgres requires converting the existing SQLite Prisma migration history before changing the Prisma provider.
 
 ## Vercel frontends
 
