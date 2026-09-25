@@ -22,6 +22,8 @@ Vendora deploys as four services:
 
 The API currently uses SQLite migrations. The Render blueprint therefore includes a persistent disk. A paid Render plan is required for that disk. Moving to Render Postgres requires converting the existing SQLite Prisma migration history before changing the Prisma provider.
 
+The Render build first compiles `packages/shared`, then builds the API. The start command runs `apps/api/dist/main.js` directly, and the expected health URL is `https://your-api.onrender.com/api/health`.
+
 ## Vercel frontends
 
 Create three Vercel projects from the same repository. Set each project's **Root Directory** and use the matching app directory:
