@@ -8,18 +8,11 @@ for (const envPath of [path.resolve(process.cwd(), '.env'), path.resolve(process
 }
 
 const prisma = new PrismaClient()
-const DEFAULT_ADMIN_EMAIL = 'admin@example.com'
-const DEFAULT_ADMIN_PASSWORD = 'admin123'
 
-function getInitialAdminCredentials() {
-  const email = process.env.ADMIN_INITIAL_EMAIL?.trim() || DEFAULT_ADMIN_EMAIL
-  const password = process.env.ADMIN_INITIAL_PASSWORD?.trim() || (process.env.NODE_ENV === 'production' ? '' : DEFAULT_ADMIN_PASSWORD)
-
-  if (!password) {
-    throw new Error('Missing ADMIN_INITIAL_PASSWORD environment variable. The initial admin bootstrap requires a secure password value.')
-  }
-
-  return { email, password }
+function requireEnvironmentVariable(name: string) {
+  const value = process.env[name]?.trim()
+  if (!value) throw new Error(`Missing ${name} environment variable.`)
+  return value
 }
 
 async function hashPassword(password: string) {
@@ -29,29 +22,14 @@ async function hashPassword(password: string) {
 async function main() {
   console.log('🌱 Starting realistic Prisma seed for Vendora development database...')
 
-  const { email, password } = getInitialAdminCredentials()
+  const seedPassword = requireEnvironmentVariable('SEED_USER_PASSWORD')
   const now = new Date()
   const baseDate = new Date('2026-08-15T09:00:00.000Z')
-  const adminPassword = await hashPassword(password)
-
-  const admin = await prisma.user.upsert({
-    where: { email },
-    update: {
-      name: 'Vendora Admin',
-      password: adminPassword,
-      role: 'ADMIN',
-      status: 'ACTIVE',
-      emailVerified: true,
-    },
-    create: {
-      name: 'Vendora Admin',
-      email,
-      password: adminPassword,
-      role: 'ADMIN',
-      status: 'ACTIVE',
-      emailVerified: true,
-    },
-  })
+  const adminEmail = requireEnvironmentVariable('ADMIN_INITIAL_EMAIL')
+  const admin = await prisma.user.findUnique({ where: { email: adminEmail } })
+  if (!admin || !['ADMIN', 'SUPER_ADMIN'].includes(admin.role)) {
+    throw new Error('Admin account not found. Run "npm run admin:create" with ADMIN_INITIAL_EMAIL and ADMIN_INITIAL_PASSWORD first.')
+  }
 
   const customerRecords = [
     { name: 'Ahmed Hassan', email: 'ahmed.hassan@vendora.local' },
@@ -60,7 +38,7 @@ async function main() {
   ]
 
   const customerPasswords = await Promise.all(
-    customerRecords.map(() => hashPassword(password)),
+    customerRecords.map(() => hashPassword(seedPassword)),
   )
 
   const customerUsers = await Promise.all(
@@ -86,7 +64,7 @@ async function main() {
   ]
 
   const sellerPasswords = await Promise.all(
-    sellerRecords.map(() => hashPassword(password)),
+    sellerRecords.map(() => hashPassword(seedPassword)),
   )
 
   const sellerUsers = await Promise.all(
@@ -273,7 +251,7 @@ async function main() {
         description: 'Premium smartwatch with health tracking and durable glass face.',
         sku: 'NP-WS-001',
         barcode: '885100000001',
-        images: JSON.stringify(['https://images.example.com/watch-1.jpg', 'https://images.example.com/watch-2.jpg']),
+        images: JSON.stringify(['https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=900&q=85']),
         category: categoryMap.electronics.name,
         brand: brandMap.northpeak.name,
         basePrice: 229.0,
@@ -290,7 +268,7 @@ async function main() {
         description: 'Water-resistant travel backpack with laptop sleeve and hidden pockets.',
         sku: 'NP-TR-002',
         barcode: '885100000002',
-        images: JSON.stringify(['https://images.example.com/backpack-1.jpg']),
+        images: JSON.stringify(['https://images.unsplash.com/photo-1553062407-98eeb64c6a62?auto=format&fit=crop&w=900&q=85']),
         category: categoryMap.fashion.name,
         brand: brandMap.northpeak.name,
         basePrice: 139.0,
@@ -307,7 +285,7 @@ async function main() {
         description: 'Minimal ceramic table lamp with warm ambient light.',
         sku: 'LA-LP-003',
         barcode: '885100000003',
-        images: JSON.stringify(['https://images.example.com/lamp-1.jpg', 'https://images.example.com/lamp-2.jpg']),
+        images: JSON.stringify(['https://images.unsplash.com/photo-1507473885765-e6ed057f782c?auto=format&fit=crop&w=900&q=85']),
         category: categoryMap['home-and-living'].name,
         brand: brandMap.luma.name,
         basePrice: 89.0,
@@ -324,7 +302,7 @@ async function main() {
         description: 'Soft woven blanket with calming neutral tones for the home.',
         sku: 'LA-TH-004',
         barcode: '885100000004',
-        images: JSON.stringify(['https://images.example.com/throw-1.jpg']),
+        images: JSON.stringify(['https://images.unsplash.com/photo-1583845112203-454c1b7b4a4f?auto=format&fit=crop&w=900&q=85']),
         category: categoryMap['home-and-living'].name,
         brand: brandMap.terra.name,
         basePrice: 64.0,
@@ -341,7 +319,7 @@ async function main() {
         description: 'Stainless steel bottle set for daily hydration and commuting.',
         sku: 'LA-AL-005',
         barcode: '885100000005',
-        images: JSON.stringify(['https://images.example.com/bottle-1.jpg']),
+        images: JSON.stringify(['https://images.unsplash.com/photo-1602143407151-7111542de6e8?auto=format&fit=crop&w=900&q=85']),
         category: categoryMap.wellness.name,
         brand: brandMap.luma.name,
         basePrice: 52.0,
@@ -358,7 +336,7 @@ async function main() {
         description: 'Premium fleece hoodie designed for comfort and light outdoor use.',
         sku: 'SM-CL-006',
         barcode: '885100000006',
-        images: JSON.stringify(['https://images.example.com/hoodie-1.jpg', 'https://images.example.com/hoodie-2.jpg']),
+        images: JSON.stringify(['https://images.unsplash.com/photo-1556821840-3a63f95609a7?auto=format&fit=crop&w=900&q=85']),
         category: categoryMap.fashion.name,
         brand: brandMap.summit.name,
         basePrice: 118.0,

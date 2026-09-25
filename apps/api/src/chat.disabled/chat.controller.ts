@@ -60,7 +60,8 @@ export class ChatController {
   @Get('messages/:messageId/attachment')
   async getMessageAttachment(@Req() req: any, @Param('messageId') messageId: string, @Res() response: any) {
     const attachment = await this.chatService.getMessageAttachmentPath(messageId, req.user);
-    return response.type(attachment.mimeType).sendFile(attachment.path);
+    if (attachment.url) return response.redirect(attachment.url);
+    return response.type(attachment.mimeType).sendFile(attachment.path as string);
   }
 
   @Post('conversations/:conversationId/read')

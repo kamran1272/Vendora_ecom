@@ -18,6 +18,10 @@ export function AdminLoginPage() {
   const [visible, setVisible] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [forgotOpen, setForgotOpen] = useState(false)
+  const [forgotEmail, setForgotEmail] = useState('')
+  const [forgotMessage, setForgotMessage] = useState('')
+  const [forgotSubmitting, setForgotSubmitting] = useState(false)
 
   useEffect(() => {
     if (searchParams.get('reason') === 'session_expired') {
@@ -79,6 +83,30 @@ export function AdminLoginPage() {
     }
   }
 
+  const handleForgotPassword = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const requestedEmail = forgotEmail.trim()
+    if (!requestedEmail) {
+      setForgotMessage('Enter the administrator email address.')
+      return
+    }
+    setForgotSubmitting(true)
+    setForgotMessage('')
+    try {
+      const response = await fetch(`${(import.meta.env.VITE_API_BASE_URL as string | undefined) || '/api'}/auth/forgot-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: requestedEmail }),
+      })
+      if (!response.ok) throw new Error('Unable to request password reset.')
+      setForgotMessage('If this email belongs to an administrator, a reset link has been sent.')
+    } catch (forgotError) {
+      setForgotMessage(forgotError instanceof Error ? forgotError.message : 'Unable to request password reset.')
+    } finally {
+      setForgotSubmitting(false)
+    }
+  }
+
   return (
     <div className="relative flex min-h-screen overflow-hidden bg-[radial-gradient(circle_at_top_left,_rgba(243,154,61,0.18),_transparent_30%),linear-gradient(135deg,#1f2d4d_0%,#23345c_45%,#1a2740_100%)] text-slate-900">
       <div className="absolute -left-12 top-8 h-60 w-60 rounded-full bg-[#f39a3d]/20 blur-3xl" />
@@ -116,7 +144,7 @@ export function AdminLoginPage() {
         <section className="rounded-[32px] border border-slate-200 bg-white/95 p-5 shadow-[0_25px_80px_rgba(15,23,42,0.15)] backdrop-blur-sm sm:p-7 lg:p-8">
           <div className="flex items-center justify-between gap-3">
             <BrandLogo compact />
-            <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-700">
+              <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-700">
               <Sparkles className="h-3.5 w-3.5" /> Secure
             </div>
           </div>
@@ -137,7 +165,7 @@ export function AdminLoginPage() {
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 text-sm text-slate-900 outline-none transition focus:border-[#f39a3d] focus:bg-white focus:ring-4 focus:ring-[#f39a3d]/10"
-                placeholder="admin@example.com"
+                placeholder="admin@company.com"
                 aria-invalid={Boolean(error)}
               />
             </div>
@@ -174,7 +202,7 @@ export function AdminLoginPage() {
               </label>
               <button
                 type="button"
-                onClick={() => setError('Password reset is handled by a system administrator. Contact your administrator to reset this account.')}
+                onClick={() => { setForgotEmail(email); setForgotMessage(''); setForgotOpen(true) }}
                 className="font-medium text-[#1f2d4d] transition hover:text-[#f39a3d]"
                 aria-label="Get help resetting your password"
               >
@@ -203,6 +231,24 @@ export function AdminLoginPage() {
               )}
             </button>
           </form>
+
+          {forgotOpen ? (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4" role="dialog" aria-modal="true" aria-labelledby="forgot-password-title">
+              <form onSubmit={handleForgotPassword} className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-indigo-600">Account recovery</p>
+                    <h2 id="forgot-password-title" className="mt-2 text-xl font-bold text-slate-900">Reset admin password</h2>
+                  </div>
+                  <button type="button" onClick={() => setForgotOpen(false)} className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm text-slate-500">Close</button>
+                </div>
+                <p className="mt-3 text-sm text-slate-600">Enter your administrator email and we will send a secure reset link.</p>
+                <input type="email" required value={forgotEmail} onChange={(event) => setForgotEmail(event.target.value)} className="mt-5 h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm outline-none focus:border-[#f39a3d] focus:bg-white" placeholder="admin@company.com" />
+                {forgotMessage ? <p className="mt-3 rounded-xl border border-indigo-100 bg-indigo-50 px-3 py-2 text-sm text-indigo-800" role="status">{forgotMessage}</p> : null}
+                <button type="submit" disabled={forgotSubmitting} className="mt-5 w-full rounded-xl bg-[#1f2d4d] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60">{forgotSubmitting ? 'Sending...' : 'Send reset link'}</button>
+              </form>
+            </div>
+          ) : null}
 
           <div className="mt-6 border-t border-slate-200 pt-4 text-center text-xs leading-6 text-slate-500">
             Authorized administrators only

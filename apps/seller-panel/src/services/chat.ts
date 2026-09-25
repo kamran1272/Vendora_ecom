@@ -1,61 +1,9 @@
-export type ChatConversation = {
-  id: string
-  type: string
-  subject?: string | null
-  status?: string | null
-  priority?: string | null
-  lastMessageAt?: string | null
-  customerId?: string | null
-  sellerId?: string | null
-  shopId?: string | null
-  productId?: string | null
-  orderId?: string | null
-  unreadCount?: number
-  online?: boolean
-  typing?: boolean
-  category?: string | null
-  participants?: Array<{ userId: string; role: string; user?: { id: string; name: string; email: string } }>
-  customer?: {
-    id: string
-    name: string
-    email: string
-  } | null
-  seller?: {
-    id: string
-    user?: {
-      id: string
-      name: string
-      email: string
-    }
-  } | null
-  messages?: ChatMessage[]
-}
-
-export type ChatMessage = {
-  id: string
-  conversationId: string
-  senderId: string
-  senderRole?: 'ADMIN' | 'SELLER' | 'CUSTOMER' | 'SYSTEM' | string
-  content: string | null
-  type?: string
-  createdAt: string
-  attachmentUrl?: string | null
-  attachmentName?: string | null
-  attachmentType?: string | null
-  deletedAt?: string | null
-  read?: boolean
-  replyToId?: string | null
-  sender?: {
-    id: string
-    name: string
-    email: string
-  }
-}
+export type { ChatConversation, ChatMessage } from '@vendora/shared'
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) || '/api'
 
 function getAuthToken() {
-  return localStorage.getItem('access_token') || localStorage.getItem('accessToken')
+  return localStorage.getItem('vendora.seller.access')
 }
 
 async function apiRequest<T>(path: string, options: RequestInit = {}): Promise<T> {

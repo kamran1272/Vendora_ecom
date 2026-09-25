@@ -129,13 +129,8 @@ export function AdminSupportCenterPage() {
         if (!ignore) setLoading(false)
       })
 
-    const interval = window.setInterval(() => {
-      fetchAdminChatConversations().then(setConversations).catch(() => undefined)
-    }, 5000)
-
     return () => {
       ignore = true
-      window.clearInterval(interval)
     }
   }, [])
 
@@ -159,21 +154,17 @@ export function AdminSupportCenterPage() {
         markAdminConversationSeen(selectedId).catch(() => undefined)
       })
 
-    const interval = window.setInterval(() => {
-      const refresh = messageSearch.trim() ? searchAdminChatMessages(selectedId, messageSearch) : fetchAdminChatMessages(selectedId)
-      refresh.then((result) => setMessages(result.data)).catch(() => undefined)
-    }, 5000)
-    return () => window.clearInterval(interval)
+    return undefined
   }, [selectedId, messageSearch])
 
   useEffect(() => {
-    const token = localStorage.getItem('access_token') || localStorage.getItem('accessToken')
+    const token = localStorage.getItem('vendora.admin.access')
     if (!token) return
 
     const configuredSocketUrl = import.meta.env.VITE_SOCKET_URL as string | undefined
     const configuredApiUrl = import.meta.env.VITE_API_BASE_URL as string | undefined
-    const socketUrl = configuredSocketUrl || (configuredApiUrl?.startsWith('http') ? configuredApiUrl.replace(/\/api\/?$/, '') : 'http://127.0.0.1:4003')
-    const socket = io(`${socketUrl}/ws/chat`, { auth: { token }, transports: ['websocket', 'polling'] })
+    const socketUrl = configuredSocketUrl || (configuredApiUrl?.startsWith('http') ? configuredApiUrl.replace(/\/api\/?$/, '') : `${window.location.protocol}//${window.location.hostname}:4003`)
+    const socket = io(`${socketUrl}/ws/chat`, { auth: { token }, transports: ['websocket'] })
     setConnectionStatus('connecting')
     socket.on('connect', () => {
       setConnectionStatus('connected')
@@ -407,7 +398,7 @@ export function AdminSupportCenterPage() {
                     <summary className="flex cursor-pointer list-none items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold uppercase tracking-[0.14em] text-slate-500 [&::-webkit-details-marker]:hidden">Internal note <ChevronDown size={15} className="transition-transform group-open:rotate-180" /></summary>
                     <label className="support-field mt-3"><span>Only visible to admins</span><textarea aria-label="Internal admin note" value={adminNotes} onChange={(event) => setAdminNotes(event.target.value)} onBlur={() => void updateTicket({ adminNotes })} rows={2} placeholder="Add context for the support team..." className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm" /></label>
                   </details>
-                  <div className="mb-3 flex flex-wrap items-center gap-2"><button type="button" onClick={() => void toggleConversationState()} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium">{selectedConversation.status === 'CLOSED' ? 'Reopen' : 'Close conversation'}</button><span className="text-xs text-slate-500">{selectedConversation.typing ? 'Someone is typing...' : typing ? 'Typing...' : 'Live updates every 5 seconds'}</span></div>
+                      <div className="mb-3 flex flex-wrap items-center gap-2"><button type="button" onClick={() => void toggleConversationState()} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium">{selectedConversation.status === 'CLOSED' ? 'Reopen' : 'Close conversation'}</button><span className="text-xs text-slate-500">{selectedConversation.typing ? 'Someone is typing...' : typing ? 'Typing...' : connectionStatus === 'connected' ? 'Live WebSocket updates' : 'Connecting to live updates...'}</span></div>
                   {error ? <div className="mb-3 rounded-xl border border-red-200 bg-red-50 p-2 text-sm text-red-700">{error}</div> : null}
                   <div className="mb-3 flex items-center gap-2"><input ref={fileRef} type="file" className="hidden" onChange={readAttachment} /><button type="button" onClick={() => fileRef.current?.click()} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"><Paperclip size={16} /> Attach file</button>{attachmentName ? <span className="truncate text-xs text-slate-500">{attachmentName}</span> : <span className="text-xs text-slate-400">No attachment selected</span>}</div>
                   <div className="support-reply-row flex gap-3">
@@ -444,7 +435,7 @@ export function AdminSupportCenterPage() {
                 {selectedConversation.shop ? <div className="rounded-xl bg-slate-50 p-3"><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Shop</p><p className="mt-1 font-medium text-slate-900">{selectedConversation.shop.name}</p></div> : null}
                 {selectedConversation.order ? <div className="rounded-xl bg-slate-50 p-3"><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Order context</p><p className="mt-1 font-medium text-slate-900">#{selectedConversation.order.id}</p><p className="mt-1 text-xs text-slate-500">{selectedConversation.order.status} · ${Number(selectedConversation.order.total ?? 0).toFixed(2)}</p></div> : null}
                 {selectedConversation.product ? <div className="rounded-xl bg-slate-50 p-3"><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Product context</p><p className="mt-1 font-medium text-slate-900">{selectedConversation.product.name}</p><p className="mt-1 text-xs text-slate-500">ID {selectedConversation.product.id}</p></div> : null}
-                <div className="rounded-xl bg-slate-50 p-3"><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Assignment</p><p className="mt-1 font-medium text-slate-900">{selectedConversation.assignedAdminId === adminUser?.id ? `${adminUser?.name || 'Admin'} (you)` : selectedConversation.assignedAdminId || 'Unassigned'}</p><button type="button" disabled={!adminUser?.id} onClick={() => void updateTicket({ assignedAdminId: adminUser?.id })} className="mt-3 rounded-lg bg-slate-950 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">Assign to me</button><p className="mt-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Priority</p><p className="mt-1 font-medium text-slate-900">{selectedConversation.priority || 'NORMAL'}</p><button type="button" onClick={() => void updateTicket({ aiEnabled: !selectedConversation.aiEnabled, aiActive: !selectedConversation.aiEnabled, humanTakeover: false })} className="mt-4 inline-flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-700"><Bot size={15} /> {selectedConversation.aiEnabled ? 'Disable AI assistant' : 'Enable AI assistant'}</button></div>
+                <div className="rounded-xl bg-slate-50 p-3"><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Assignment</p><p className="mt-1 font-medium text-slate-900">{selectedConversation.assignedAdminId === adminUser?.id ? `${adminUser?.name || 'Admin'} (you)` : selectedConversation.assignedAdminId || 'Unassigned'}</p><button type="button" disabled={!adminUser?.id} onClick={() => void updateTicket({ assignedAdminId: adminUser?.id })} className="mt-3 rounded-lg bg-slate-950 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">Assign to me</button><p className="mt-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Priority</p><p className="mt-1 font-medium text-slate-900">{selectedConversation.priority || 'NORMAL'}</p><div className="mt-4 rounded-lg border border-slate-200 bg-white p-3"><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">AI state</p><p className="mt-2 text-xs text-slate-600">The AI flags are stored in the database, but no model or agent is connected yet.</p><button type="button" onClick={() => void updateTicket({ aiEnabled: !selectedConversation.aiEnabled, aiActive: !selectedConversation.aiEnabled, humanTakeover: false })} className="mt-3 inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700"><Bot size={15} /> {selectedConversation.aiEnabled ? 'Disable AI flags' : 'Enable AI flags'}</button></div></div>
                 </div>
               </details>
             </aside>

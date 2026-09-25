@@ -1,6 +1,7 @@
 import { FormEvent, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { api } from '../../services/api'
+import { BrandLogo } from '../../components/BrandLogo'
 
 type RegistrationResponse = { message?: string }
 
@@ -54,16 +55,17 @@ export function SellerRegistrationPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#edf2f8] p-4 md:p-8">
+    <main className="min-h-screen bg-[#f4f6fb] p-4 md:p-8">
       <header className="mx-auto flex max-w-6xl items-center justify-between border-b border-slate-200 pb-5">
-        <Link to="/users/login" className="text-xl font-black tracking-tight text-slate-900">Vendora</Link>
-        <nav className="flex items-center gap-4 text-sm text-slate-600"><Link to="/users/login" className="hover:text-[#2d80d8]">Login</Link><span className="font-medium text-[#2d80d8]">Registration</span></nav>
+        <Link to="/users/login" aria-label="Vendora home"><BrandLogo compact /></Link>
+        <nav className="flex items-center gap-4 text-sm text-slate-600"><Link to="/users/login" className="hover:text-[#ff7612]">Login</Link><span className="font-medium text-[#d97706]">Registration</span></nav>
       </header>
 
       <section className="mx-auto max-w-2xl py-8">
-        <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm md:p-8">
-          <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Seller registration</div>
-          <h1 className="mt-2 text-2xl font-bold text-slate-900">Register your shop</h1>
+        <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-[0_20px_60px_rgba(16,36,81,0.1)] md:p-8">
+          <BrandLogo compact />
+          <div className="mt-7 text-xs font-semibold uppercase tracking-[0.16em] text-[#d97706]">Seller registration</div>
+          <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-900">Register your shop</h1>
           <p className="mt-2 text-sm text-slate-500">Submit your shop details for seller approval.</p>
 
           <form id="reg-form" onSubmit={submit} className="mt-6 grid gap-4 md:grid-cols-2">

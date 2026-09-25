@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Body, Param, Put, Delete, Patch, Query, Req, Res, UseGuards, UploadedFile, UseInterceptors, BadRequestException } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
+import { memoryStorage, diskStorage } from 'multer';
 import { extname } from 'path';
 import { randomUUID } from 'crypto';
 import { mkdirSync } from 'fs';
@@ -42,7 +42,7 @@ export class SellersController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.SELLER)
   @UseInterceptors(FileInterceptor('file', {
-    storage: diskStorage({ destination: (_req, _file, callback) => { const destination = require('path').resolve(__dirname, '../uploads'); mkdirSync(destination, { recursive: true }); callback(null, destination); }, filename: (_req, file, callback) => callback(null, `${randomUUID()}${extname(file.originalname).toLowerCase()}`) }),
+    storage: memoryStorage(),
     limits: { fileSize: 10 * 1024 * 1024 },
     fileFilter: (_req, file, callback) => callback(null, Boolean(file.mimetype.match(/^(image|application|text|audio|video)\//))),
   }))
@@ -68,15 +68,16 @@ export class SellersController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.SELLER)
   async downloadUpload(@Param('storedName') storedName: string, @Req() req: any, @Res() response: any) {
-    const filePath = await this.sellersService.getSellerUploadPath(req.user.userId, storedName);
-    return response.sendFile(filePath);
+    const upload = await this.sellersService.getSellerUpload(req.user.userId, storedName);
+    if (upload.url && !upload.path) return response.redirect(upload.url);
+    return response.sendFile(upload.path as string);
   }
 
   @Post('uploads')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.SELLER)
   @UseInterceptors(FileInterceptor('file', {
-    storage: diskStorage({ destination: (_req, _file, callback) => { const destination = require('path').resolve(__dirname, '../uploads'); mkdirSync(destination, { recursive: true }); callback(null, destination); }, filename: (_req, file, callback) => callback(null, `${randomUUID()}${extname(file.originalname).toLowerCase()}`) }),
+    storage: memoryStorage(),
     limits: { fileSize: 10 * 1024 * 1024 },
     fileFilter: (_req, file, callback) => callback(null, Boolean(file.mimetype.match(/^(image|application|text|audio|video)\//))),
   }))

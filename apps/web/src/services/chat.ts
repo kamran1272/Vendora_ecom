@@ -1,49 +1,6 @@
 import { apiRequest } from '@/services/api'
 
-export type ChatConversation = {
-  id: string
-  type: string
-  subject?: string | null
-  status?: string | null
-  priority?: string | null
-  lastMessageAt?: string | null
-  customerId?: string | null
-  sellerId?: string | null
-  shopId?: string | null
-  productId?: string | null
-  orderId?: string | null
-  unreadCount?: number
-  customer?: {
-    id: string
-    name: string
-    email: string
-  } | null
-  seller?: {
-    id: string
-    user?: {
-      id: string
-      name: string
-      email: string
-    }
-  } | null
-  messages?: ChatMessage[]
-}
-
-export type ChatMessage = {
-  id: string
-  conversationId: string
-  senderId: string
-  senderRole?: 'ADMIN' | 'SELLER' | 'CUSTOMER' | 'SYSTEM' | string
-  content: string | null
-  type?: string
-  createdAt: string
-  readAt?: string | null
-  sender?: {
-    id: string
-    name: string
-    email: string
-  }
-}
+export type { ChatConversation, ChatMessage } from '@vendora/shared'
 
 export async function fetchChatConversations(): Promise<ChatConversation[]> {
   return apiRequest<ChatConversation[]>('/chat/conversations')

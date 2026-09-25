@@ -5,7 +5,7 @@ import { PrismaService } from '@/database/prisma.service';
 export class ProductsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  private normalizeProduct(product: any) {
+  private normalizeProduct(product: any, rating: number) {
     const images = (() => {
       try {
         return product.images ? JSON.parse(product.images) : [];
@@ -23,7 +23,7 @@ export class ProductsService {
       brand: product.brand ?? null,
       price: Number(product.sellingPrice ?? product.basePrice ?? 0),
       stock: Number(product.stock ?? product.warehouseProduct?.stock ?? 0),
-      rating: 4.8,
+      rating,
       image: images[0] ?? null,
       images,
       description: product.description ?? product.warehouseProduct?.description ?? '',
@@ -38,7 +38,7 @@ export class ProductsService {
       orderBy: { createdAt: 'desc' },
     });
 
-    return products.map((product) => this.normalizeProduct(product));
+    return Promise.all(products.map(async (product) => this.normalizeProduct(product, await this.getApprovedRating(product.id, product.warehouseProductId))));
   }
 
   async findOne(id: number | string) {
@@ -51,7 +51,7 @@ export class ProductsService {
       throw new NotFoundException('Product not found.');
     }
 
-    return this.normalizeProduct(product);
+    return this.normalizeProduct(product, await this.getApprovedRating(product.id, product.warehouseProductId));
   }
 
   async findByCategory(category: string) {
@@ -67,7 +67,7 @@ export class ProductsService {
       orderBy: { createdAt: 'desc' },
     });
 
-    return products.map((product) => this.normalizeProduct(product));
+    return Promise.all(products.map(async (product) => this.normalizeProduct(product, await this.getApprovedRating(product.id, product.warehouseProductId))));
   }
 
   async findBySeller(sellerId: number | string) {
@@ -79,7 +79,7 @@ export class ProductsService {
       orderBy: { createdAt: 'desc' },
     });
 
-    return products.map((product) => this.normalizeProduct(product));
+    return Promise.all(products.map(async (product) => this.normalizeProduct(product, await this.getApprovedRating(product.id, product.warehouseProductId))));
   }
 
   async create(productData: any) {
@@ -121,7 +121,18 @@ export class ProductsService {
       include: { warehouseProduct: true },
     });
 
-    return this.normalizeProduct(updated);
+    return this.normalizeProduct(updated, await this.getApprovedRating(updated.id, updated.warehouseProductId));
+  }
+
+  private async getApprovedRating(productId: string, warehouseProductId?: string | null) {
+    const result = await this.prisma.review.aggregate({
+      where: {
+        status: 'APPROVED',
+        OR: [{ productId }, ...(warehouseProductId ? [{ warehouseProductId }] : [])],
+      },
+      _avg: { rating: true },
+    });
+    return result._avg.rating ?? 0;
   }
 
   async remove(id: number | string) {
@@ -134,7 +145,7 @@ export class ProductsService {
       throw new NotFoundException('Product not found.');
     }
 
-    await this.prisma.sellerProduct.delete({ where: { id: String(id) } });
-    return { id: String(id), deleted: true };
+    await this.prisma.sellerProduct.update({ where: { id: String(id) }, data: { status: 'INACTIVE' } });
+    return { id: String(id), deleted: false, archived: true };
   }
 }

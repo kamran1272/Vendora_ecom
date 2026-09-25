@@ -8,6 +8,8 @@ type CartItemInput = {
   price?: number;
   quantity?: number;
   sellerId?: number | string;
+  variantId?: string | null;
+  variantSku?: string | null;
 };
 
 @Injectable()
@@ -164,7 +166,13 @@ export class CartService {
     const canonicalListingId = listing.id;
     const canonicalName = listing.warehouseProduct.name;
     const canonicalPrice = Number(listing.sellingPrice);
-    const existing = cart.items.find((item) => item.productId === canonicalListingId || (item.warehouseProductId === canonicalProductId && item.sellerId === listing.sellerId));
+    const variant = product.variantId
+      ? await this.prisma.productVariant.findFirst({ where: { id: String(product.variantId), warehouseProductId: canonicalProductId, status: 'ACTIVE' } })
+      : null;
+    if (product.variantId && !variant) throw new BadRequestException('The selected product variant is not available.');
+    const variantId = variant?.id ?? (product.variantId ? String(product.variantId) : null);
+    const variantSku = variant?.sku ?? product.variantSku ?? null;
+    const existing = cart.items.find((item) => item.productId === canonicalListingId && (item.variantId ?? null) === variantId);
 
     if (existing) {
       await this.prisma.cartItem.update({
@@ -175,6 +183,8 @@ export class CartService {
           name: canonicalName,
           sellerId: listing.sellerId,
           warehouseProductId: canonicalProductId,
+          variantId,
+          variantSku,
         },
       });
     } else {
@@ -187,6 +197,8 @@ export class CartService {
           name: canonicalName,
           price: canonicalPrice,
           quantity: normalizedQty,
+          variantId,
+          variantSku,
         },
       });
     }

@@ -10,11 +10,6 @@ import { NotificationsService } from './notifications.service';
 export class NotificationsController {
   constructor(private notificationsService: NotificationsService) {}
 
-  @Post()
-  send(@Body() notificationData: any) {
-    return this.notificationsService.send(notificationData);
-  }
-
   @Get('user/:userId')
   getUserNotifications(@Req() req: any, @Param('userId') userId: string) {
     return this.notificationsService.getUserNotifications(req.user.userId === userId ? userId : req.user.userId);

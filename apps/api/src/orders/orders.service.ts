@@ -1,14 +1,14 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { CartService } from '../cart/cart.service';
 import { PrismaService } from '../database/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { CouponsService } from '../coupons/coupons.service';
 
 @Injectable()
 export class OrdersService {
   constructor(
-    private readonly cartService: CartService,
     private readonly prisma: PrismaService,
     private readonly notificationsService: NotificationsService,
+    private readonly couponsService: CouponsService,
   ) {}
 
   findAll() {
@@ -73,21 +73,74 @@ export class OrdersService {
   }
 
   async checkout(userId: number | string, checkoutData: any) {
-    const cart = await this.cartService.getCart(userId);
-
-    if (!cart.items || cart.items.length === 0) {
-      throw new BadRequestException('Cart is empty.');
-    }
+    const idempotencyKey = String(checkoutData?.idempotencyKey || '').trim();
+    if (!idempotencyKey) throw new BadRequestException('An idempotency key is required for checkout.');
+    const existingOrder = await (this.prisma as any).order.findUnique({ where: { idempotencyKey } });
+    if (existingOrder && existingOrder.userId === String(userId)) return { message: 'Order already created.', order: await this.findOne(existingOrder.id) };
 
     const order = await this.prisma.$transaction(async (tx) => {
+      const cart = await tx.cart.findUnique({
+        where: { userId: String(userId) },
+        include: { items: true },
+      });
+
+      if (!cart?.items.length) {
+        throw new BadRequestException('Cart is empty.');
+      }
+
+      const listings = await Promise.all(cart.items.map((item) => tx.sellerProduct.findUnique({
+        where: { id: item.productId },
+        include: { warehouseProduct: true },
+      })));
+
+      if (listings.some((listing) => !listing || listing.status !== 'ACTIVE' || listing.warehouseProduct.status !== 'PUBLISHED')) {
+        throw new BadRequestException('One or more cart items are no longer available.');
+      }
+
+      const resolvedItems = cart.items.map((item, index) => {
+        const listing = listings[index]!;
+        const quantity = Number(item.quantity);
+        if (!Number.isInteger(quantity) || quantity <= 0) {
+          throw new BadRequestException('Cart contains an invalid quantity.');
+        }
+        return {
+          item,
+          listing,
+          quantity,
+          price: Number(listing.sellingPrice),
+        };
+      });
+
+      for (const resolved of resolvedItems) {
+        const updated = await tx.warehouseProduct.updateMany({
+          where: { id: resolved.listing.warehouseProductId, stock: { gte: resolved.quantity } },
+          data: { stock: { decrement: resolved.quantity } },
+        });
+        if (updated.count !== 1) {
+          throw new BadRequestException(`Not enough stock is available for ${resolved.listing.warehouseProduct.name}.`);
+        }
+      }
+
+      const subtotal = resolvedItems.reduce((sum, resolved) => sum + resolved.price * resolved.quantity, 0);
+      const rules = await (tx as any).commerceConfig.upsert({ where: { id: 'default' }, update: {}, create: { id: 'default' } });
+      const tax = subtotal * Number(rules.taxRate);
+      const sellerCount = new Set(resolvedItems.map((resolved) => resolved.listing.sellerId)).size;
+      const shipping = subtotal >= Number(rules.freeShippingMinimum) ? 0 : sellerCount * Number(rules.shippingPerSeller);
+      const coupon = cart.couponCode ? await this.couponsService.getValidCoupon(cart.couponCode, subtotal) : null;
+      const discount = coupon?.discount ?? 0;
+      if (coupon) {
+        await (tx as any).coupon.update({ where: { id: coupon.coupon.id }, data: { usageCount: { increment: 1 } } });
+      }
+      const total = subtotal + tax + shipping - discount;
+
       const createdOrder = await tx.order.create({
         data: {
           userId: String(userId),
-          subtotal: Number(cart.subtotal),
-          tax: Number(cart.tax),
-          shipping: Number(cart.shipping),
-          discount: Number(cart.discount),
-          total: Number(cart.total),
+          subtotal: Number(subtotal.toFixed(2)),
+          tax: Number(tax.toFixed(2)),
+          shipping: Number(shipping.toFixed(2)),
+          discount: Number(discount.toFixed(2)),
+          total: Number(total.toFixed(2)),
           status: 'PENDING',
           paymentMethod: checkoutData?.paymentMethod || 'stripe',
           shippingAddress:
@@ -97,20 +150,23 @@ export class OrdersService {
                 : JSON.stringify(checkoutData.shippingAddress)
               : null,
           couponCode: cart.couponCode || null,
+          idempotencyKey,
           items: {
-            create: cart.items.map((item) => ({
-              productId: String(item.productId),
-              warehouseProductId: item.warehouseProductId ?? null,
-              sellerId: item.sellerId ? String(item.sellerId) : null,
-              name: item.name,
-              quantity: Number(item.quantity),
-              price: Number(item.price),
+            create: resolvedItems.map(({ item, listing, quantity, price }) => ({
+              productId: listing.id,
+              warehouseProductId: listing.warehouseProductId,
+              sellerId: listing.sellerId,
+              variantId: item.variantId ?? null,
+              variantSku: item.variantSku ?? null,
+              name: listing.warehouseProduct.name,
+              quantity,
+              price,
             })),
           },
           statusHistory: {
             create: [{ status: 'PENDING', note: 'Order created' }],
           },
-        },
+        } as any,
         include: {
           items: true,
           payment: true,
@@ -142,10 +198,10 @@ export class OrdersService {
         });
       }
 
+      await tx.cartItem.deleteMany({ where: { cartId: cart.id } });
+
       return createdOrder;
     });
-
-    await this.cartService.clear(userId);
 
     return {
       message: 'Order created successfully.',
@@ -179,6 +235,8 @@ export class OrdersService {
             productId: String(item.productId),
             warehouseProductId: item.warehouseProductId ?? null,
             sellerId: item.sellerId ? String(item.sellerId) : null,
+            variantId: item.variantId ?? null,
+            variantSku: item.variantSku ?? null,
             name: item.name || `Product ${item.productId}`,
             quantity: Number(item.quantity ?? 1),
             price: Number(item.price ?? 0),

@@ -1,5 +1,5 @@
 import { fetchAdminChatConversations } from './chat'
-import { getAdminBrands, getAdminCategories, getAdminCommissions, getAdminDashboardOverview, getAdminOrders, getAdminPackages, getAdminPayments, getAdminProducts, getAdminRefunds, getAdminSellerApplications, getAdminSellers, getAdminUsers, getAdminWithdrawals } from './adminApi'
+import { getAdminBrands, getAdminCategories, getAdminCommissions, getAdminOrders, getAdminPackages, getAdminPayments, getAdminProducts, getAdminRefunds, getAdminSellerApplications, getAdminSellers, getAdminUsers, getAdminWithdrawals } from './adminApi'
 import type { DashboardOverview, PaymentRecord, RecentOrder, TopProductMetric, TopSellerMetric } from '../types'
 
 export type DashboardRange = '7d' | '30d' | '365d' | 'custom'
@@ -57,22 +57,57 @@ function withinRange(dateValue: unknown, range: DashboardRange, customFrom?: str
   return date >= from && date <= to
 }
 
-function buildTrend(entries: Array<{ label: string; value: number }>, labelCount = 7): Array<{ label: string; value: number }> {
-  if (!entries.length) {
-    return Array.from({ length: labelCount }, (_, index) => ({
-      label: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][index] ?? `D${index + 1}`,
-      value: 0,
-    }))
-  }
+function getRangeBounds(range: DashboardRange, customFrom?: string, customTo?: string) {
+  const now = new Date()
+  const to = range === 'custom' && customTo ? new Date(`${customTo}T23:59:59.999`) : now
+  const from = range === 'custom' && customFrom
+    ? new Date(`${customFrom}T00:00:00.000`)
+    : new Date(now.getTime() - (range === '7d' ? 6 : range === '365d' ? 364 : 29) * 24 * 60 * 60 * 1000)
+  return { from, to }
+}
 
-  if (entries.length >= labelCount) return entries.slice(0, labelCount)
+function getPreviousRangeBounds(range: DashboardRange, customFrom?: string, customTo?: string) {
+  const current = getRangeBounds(range, customFrom, customTo)
+  const span = current.to.getTime() - current.from.getTime() + 1
+  const to = new Date(current.from.getTime() - 1)
+  return { from: new Date(to.getTime() - span + 1), to }
+}
 
-  const padded = [...entries]
-  while (padded.length < labelCount) {
-    padded.push({ label: `D${padded.length + 1}`, value: 0 })
-  }
+function inBounds(dateValue: unknown, bounds: { from: Date; to: Date }) {
+  const date = toDate(dateValue)
+  return Boolean(date && date >= bounds.from && date <= bounds.to)
+}
 
-  return padded
+function formatDelta(current: number, previous: number) {
+  if (previous === 0) return current === 0 ? '0.0%' : 'N/A'
+  const delta = ((current - previous) / Math.abs(previous)) * 100
+  return `${delta >= 0 ? '+' : ''}${delta.toFixed(1)}%`
+}
+
+function buildDatedTrend(
+  records: unknown[],
+  range: DashboardRange,
+  customFrom: string | undefined,
+  customTo: string | undefined,
+  valueOf: (record: Record<string, unknown>) => number,
+) {
+  const { from, to } = getRangeBounds(range, customFrom, customTo)
+  const bucketCount = 7
+  const span = Math.max(1, to.getTime() - from.getTime())
+  const buckets = Array.from({ length: bucketCount }, (_, index) => ({
+    label: new Date(from.getTime() + (span * index) / bucketCount).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+    value: 0,
+  }))
+
+  records.forEach((record) => {
+    const item = record as Record<string, unknown>
+    const date = toDate(item.createdAt ?? item.requestedAt ?? item.date)
+    if (!date || date < from || date > to) return
+    const index = Math.min(bucketCount - 1, Math.floor(((date.getTime() - from.getTime()) / span) * bucketCount))
+    buckets[index].value += valueOf(item)
+  })
+
+  return buckets
 }
 
 function getStatusTone(status: string): RecentOrder['status'] {
@@ -89,8 +124,7 @@ export const getAdminOverview = async (
   customFrom?: string,
   customTo?: string,
 ): Promise<DashboardOverview> => {
-  const [dashboard, orders, payments, sellers, products, users, applications, refunds, commissions, categories, brands, withdrawals] = await Promise.all([
-    getAdminDashboardOverview().catch(() => ({} as Record<string, unknown>)),
+  const [orders, payments, sellers, products, users, applications, refunds, commissions, categories, brands, withdrawals] = await Promise.all([
     getAdminOrders().catch(() => []),
     getAdminPayments().catch(() => []),
     getAdminSellers().catch(() => []),
@@ -108,70 +142,58 @@ export const getAdminOverview = async (
 
   const filteredOrders = (Array.isArray(orders) ? orders : []).filter((order) => withinRange((order as Record<string, unknown>).createdAt ?? (order as Record<string, unknown>).date, range, customFrom, customTo))
   const filteredPayments = (Array.isArray(payments) ? payments : []).filter((payment) => withinRange((payment as Record<string, unknown>).createdAt ?? (payment as Record<string, unknown>).date, range, customFrom, customTo))
-  const filteredSellers = (Array.isArray(sellers) ? sellers : []).filter((seller) => withinRange((seller as Record<string, unknown>).createdAt ?? (seller as Record<string, unknown>).registeredAt, range, customFrom, customTo))
-  const filteredProducts = (Array.isArray(products) ? products : []).filter((product) => withinRange((product as Record<string, unknown>).createdAt ?? (product as Record<string, unknown>).updatedAt, range, customFrom, customTo))
   const filteredUsers = (Array.isArray(users) ? users : []).filter((user) => withinRange((user as Record<string, unknown>).createdAt ?? (user as Record<string, unknown>).joinedAt, range, customFrom, customTo))
-  const filteredApplications = (Array.isArray(applications) ? applications : []).filter((application) => withinRange((application as Record<string, unknown>).submittedAt ?? (application as Record<string, unknown>).createdAt, range, customFrom, customTo))
   const filteredRefunds = (Array.isArray(refunds) ? refunds : []).filter((refund) => withinRange((refund as Record<string, unknown>).requestedAt ?? (refund as Record<string, unknown>).createdAt, range, customFrom, customTo))
   const filteredCommissions = (Array.isArray(commissions) ? commissions : []).filter((commission) => withinRange((commission as Record<string, unknown>).createdAt ?? (commission as Record<string, unknown>).date, range, customFrom, customTo))
+
+  const previousBounds = getPreviousRangeBounds(range, customFrom, customTo)
+  const previousOrders = (Array.isArray(orders) ? orders : []).filter((order) => inBounds((order as Record<string, unknown>).createdAt ?? (order as Record<string, unknown>).date, previousBounds))
+  const previousUsers = (Array.isArray(users) ? users : []).filter((user) => inBounds((user as Record<string, unknown>).createdAt ?? (user as Record<string, unknown>).joinedAt, previousBounds))
+  const previousSellers = (Array.isArray(sellers) ? sellers : []).filter((seller) => inBounds((seller as Record<string, unknown>).createdAt ?? (seller as Record<string, unknown>).registeredAt, previousBounds))
+  const previousProducts = (Array.isArray(products) ? products : []).filter((product) => inBounds((product as Record<string, unknown>).createdAt, previousBounds))
+  const previousRefunds = (Array.isArray(refunds) ? refunds : []).filter((refund) => inBounds((refund as Record<string, unknown>).requestedAt ?? (refund as Record<string, unknown>).createdAt, previousBounds))
+  const previousCommissions = (Array.isArray(commissions) ? commissions : []).filter((commission) => inBounds((commission as Record<string, unknown>).createdAt ?? (commission as Record<string, unknown>).date, previousBounds))
 
   const grossRevenue = filteredOrders.reduce((sum, order) => sum + toNumber((order as Record<string, unknown>).total), 0)
   const refundAmount = filteredRefunds.reduce((sum, refund) => sum + toNumber((refund as Record<string, unknown>).amount), 0)
   const commissionAmount = filteredCommissions.reduce((sum, commission) => sum + toNumber((commission as Record<string, unknown>).commission ?? (commission as Record<string, unknown>).amount ?? 0), 0)
   const paymentVolume = filteredPayments.reduce((sum, payment) => sum + toNumber((payment as Record<string, unknown>).amount), 0)
-  const gmv = grossRevenue + refundAmount
-  const netRevenue = Math.max(0, grossRevenue - refundAmount - commissionAmount)
-  const totalCustomers = filteredUsers.length || toNumber((dashboard as Record<string, unknown>).totalCustomers)
-  const totalSellers = filteredSellers.length || toNumber((dashboard as Record<string, unknown>).totalSellers)
-  const totalProducts = filteredProducts.length || toNumber((dashboard as Record<string, unknown>).totalProducts)
-  const activeSellers = filteredSellers.filter((seller) => String((seller as Record<string, unknown>).status ?? '').toLowerCase() === 'active').length
-  const pendingSellerApplications = filteredApplications.filter((application) => String((application as Record<string, unknown>).status ?? '').toLowerCase().includes('pending')).length
-  const lowStockProducts = filteredProducts.filter((product) => toNumber((product as Record<string, unknown>).stock) <= 10).length
+  const netSales = Math.max(0, grossRevenue - refundAmount)
+  const gmv = grossRevenue
+  const netRevenue = Math.max(0, netSales - commissionAmount)
+  // Snapshot metrics describe the current marketplace. Only trends and financial
+  // flow metrics are scoped to the selected reporting period.
+  const totalCustomers = Array.isArray(users) ? users.length : 0
+  const totalSellers = Array.isArray(sellers) ? sellers.length : 0
+  const totalProducts = Array.isArray(products) ? products.length : 0
+  const activeSellers = (Array.isArray(sellers) ? sellers : []).filter((seller) => String((seller as Record<string, unknown>).status ?? '').toLowerCase() === 'active').length
+  const pendingSellerApplications = (Array.isArray(applications) ? applications : []).filter((application) => String((application as Record<string, unknown>).status ?? '').toLowerCase().includes('pending')).length
+  const lowStockProducts = (Array.isArray(products) ? products : []).filter((product) => toNumber((product as Record<string, unknown>).stock) <= 10).length
   const supportTickets = conversations.filter((conversation) => !['resolved', 'closed'].includes(String((conversation as Record<string, unknown>).status ?? '').toLowerCase())).length
   const averageOrderValue = filteredOrders.length ? grossRevenue / filteredOrders.length : 0
   const conversionRate = totalCustomers ? Math.min(100, (filteredOrders.length / totalCustomers) * 100) : 0
+  const previousGrossRevenue = previousOrders.reduce((sum, order) => sum + toNumber((order as Record<string, unknown>).total), 0)
+  const previousRefundAmount = previousRefunds.reduce((sum, refund) => sum + toNumber((refund as Record<string, unknown>).amount), 0)
+  const previousCommissionAmount = previousCommissions.reduce((sum, commission) => sum + toNumber((commission as Record<string, unknown>).commission ?? (commission as Record<string, unknown>).amount), 0)
+  const previousNetRevenue = Math.max(0, previousGrossRevenue - previousRefundAmount - previousCommissionAmount)
 
-  const revenueTrend = buildTrend([
-    { label: 'Mon', value: grossRevenue * 0.2 },
-    { label: 'Tue', value: grossRevenue * 0.28 },
-    { label: 'Wed', value: grossRevenue * 0.22 },
-    { label: 'Thu', value: grossRevenue * 0.35 },
-    { label: 'Fri', value: grossRevenue * 0.41 },
-    { label: 'Sat', value: grossRevenue * 0.36 },
-    { label: 'Sun', value: grossRevenue * 0.44 },
-  ])
+  const revenueTrend = buildDatedTrend(filteredOrders, range, customFrom, customTo, (order) => toNumber(order.total))
+  const ordersTrend = buildDatedTrend(filteredOrders, range, customFrom, customTo, () => 1)
+  const customersTrend = buildDatedTrend(filteredUsers, range, customFrom, customTo, () => 1)
+  const commissionTrend = buildDatedTrend(filteredCommissions, range, customFrom, customTo, (commission) => toNumber(commission.commission ?? commission.amount))
 
-  const ordersTrend = buildTrend([
-    { label: 'Mon', value: filteredOrders.length ? Math.max(1, Math.round(filteredOrders.length * 0.18)) : 0 },
-    { label: 'Tue', value: filteredOrders.length ? Math.max(1, Math.round(filteredOrders.length * 0.24)) : 0 },
-    { label: 'Wed', value: filteredOrders.length ? Math.max(1, Math.round(filteredOrders.length * 0.2)) : 0 },
-    { label: 'Thu', value: filteredOrders.length ? Math.max(1, Math.round(filteredOrders.length * 0.31)) : 0 },
-    { label: 'Fri', value: filteredOrders.length ? Math.max(1, Math.round(filteredOrders.length * 0.42)) : 0 },
-    { label: 'Sat', value: filteredOrders.length ? Math.max(1, Math.round(filteredOrders.length * 0.35)) : 0 },
-    { label: 'Sun', value: filteredOrders.length ? Math.max(1, Math.round(filteredOrders.length * 0.46)) : 0 },
-  ])
-
-  const customersTrend = buildTrend([
-    { label: 'Mon', value: totalCustomers ? Math.max(1, Math.round(totalCustomers * 0.12)) : 0 },
-    { label: 'Tue', value: totalCustomers ? Math.max(1, Math.round(totalCustomers * 0.14)) : 0 },
-    { label: 'Wed', value: totalCustomers ? Math.max(1, Math.round(totalCustomers * 0.16)) : 0 },
-    { label: 'Thu', value: totalCustomers ? Math.max(1, Math.round(totalCustomers * 0.18)) : 0 },
-    { label: 'Fri', value: totalCustomers ? Math.max(1, Math.round(totalCustomers * 0.21)) : 0 },
-    { label: 'Sat', value: totalCustomers ? Math.max(1, Math.round(totalCustomers * 0.19)) : 0 },
-    { label: 'Sun', value: totalCustomers ? Math.max(1, Math.round(totalCustomers * 0.17)) : 0 },
-  ])
-
-  const commissionTrend = buildTrend([
-    { label: 'Mon', value: commissionAmount * 0.14 },
-    { label: 'Tue', value: commissionAmount * 0.18 },
-    { label: 'Wed', value: commissionAmount * 0.21 },
-    { label: 'Thu', value: commissionAmount * 0.28 },
-    { label: 'Fri', value: commissionAmount * 0.31 },
-    { label: 'Sat', value: commissionAmount * 0.25 },
-    { label: 'Sun', value: commissionAmount * 0.34 },
-  ])
-
-  const categorySales = ((Array.isArray(categories) ? categories : []) as Array<Record<string, unknown>>).slice(0, 6).map((item) => ({ label: String(item.name ?? item.category ?? 'General'), value: toNumber(item.productCount ?? item.count ?? 1) * 48 }))
+  const orderItems: Array<Record<string, unknown>> = (Array.isArray(filteredOrders) ? filteredOrders : []).flatMap((order) => {
+    const record = order as Record<string, unknown>
+    return (Array.isArray(record.items) ? record.items : []).map((item) => ({
+      ...(item as Record<string, unknown>),
+      orderCreatedAt: record.createdAt,
+    }))
+  })
+  const categorySales = [...orderItems.reduce((totals, item) => {
+    const category = String(item.category ?? item.productCategory ?? 'Uncategorized')
+    totals.set(category, (totals.get(category) ?? 0) + toNumber(item.price) * toNumber(item.quantity || 1))
+    return totals
+  }, new Map<string, number>())].map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value).slice(0, 6)
   const sellerPerformance = ((Array.isArray(sellers) ? sellers : []) as Array<Record<string, unknown>>).slice(0, 6).map((seller, index) => ({ label: String((seller as Record<string, unknown>).shopName ?? (seller as Record<string, unknown>).sellerName ?? `Seller ${index + 1}`), value: toNumber((seller as Record<string, unknown>).earnings ?? (seller as Record<string, unknown>).revenue ?? 0) }))
 
   const topSellers: TopSellerMetric[] = (Array.isArray(sellers) ? sellers : [])
@@ -180,19 +202,25 @@ export const getAdminOverview = async (
       name: String((seller as Record<string, unknown>).shopName ?? (seller as Record<string, unknown>).sellerName ?? 'Seller'),
       revenue: toNumber((seller as Record<string, unknown>).earnings ?? (seller as Record<string, unknown>).revenue ?? 0),
       orders: toNumber((seller as Record<string, unknown>).orders ?? 0),
-      rating: toNumber((seller as Record<string, unknown>).rating ?? 4.8),
+      rating: toNumber((seller as Record<string, unknown>).rating),
       status: String((seller as Record<string, unknown>).status ?? 'ACTIVE'),
     }))
 
-  const topProducts: TopProductMetric[] = (Array.isArray(products) ? products : [])
-    .slice(0, 5)
-    .map((product) => ({
-      name: String((product as Record<string, unknown>).name ?? 'Product'),
-      revenue: toNumber((product as Record<string, unknown>).price ?? 0) * toNumber((product as Record<string, unknown>).stock ?? 0),
-      units: toNumber((product as Record<string, unknown>).stock ?? 0),
-      stock: toNumber((product as Record<string, unknown>).stock ?? 0),
-      status: String((product as Record<string, unknown>).status ?? 'PUBLISHED'),
-    }))
+  const productCatalog = new Map((Array.isArray(products) ? products : []).map((product) => [String((product as Record<string, unknown>).id), product as Record<string, unknown>]))
+  const topProducts: TopProductMetric[] = [...orderItems.reduce((totals, item) => {
+    const id = String(item.productId ?? item.warehouseProductId ?? item.name)
+    const current = totals.get(id) ?? { name: String(item.name ?? 'Product'), revenue: 0, units: 0 }
+    current.revenue += toNumber(item.price) * toNumber(item.quantity || 1)
+    current.units += toNumber(item.quantity || 1)
+    totals.set(id, current)
+    return totals
+  }, new Map<string, { name: string; revenue: number; units: number }>())].sort((a, b) => b[1].revenue - a[1].revenue).slice(0, 5).map(([id, item]) => ({
+    name: item.name,
+    revenue: item.revenue,
+    units: item.units,
+    stock: toNumber(productCatalog.get(id)?.stock),
+    status: String(productCatalog.get(id)?.status ?? 'UNKNOWN'),
+  }))
 
   const recentOrders: RecentOrder[] = (Array.isArray(orders) ? orders : [])
     .slice(0, 5)
@@ -224,14 +252,14 @@ export const getAdminOverview = async (
   }))
 
   const kpis = [
-    { label: 'Gross Revenue', value: formatMoney(grossRevenue), delta: '+12.4%', tone: 'emerald' as const },
-    { label: 'Net Revenue', value: formatMoney(netRevenue), delta: '+9.1%', tone: 'sky' as const },
-    { label: 'GMV', value: formatMoney(gmv), delta: '+11.6%', tone: 'violet' as const },
-    { label: 'Orders', value: String(filteredOrders.length), delta: '+8.3%', tone: 'amber' as const },
-    { label: 'Customers', value: String(totalCustomers), delta: '+6.8%', tone: 'slate' as const },
-    { label: 'Sellers', value: String(totalSellers), delta: '+4.2%', tone: 'rose' as const },
-    { label: 'Products', value: String(totalProducts), delta: '+3.1%', tone: 'sky' as const },
-    { label: 'Refunds', value: formatMoney(refundAmount), delta: '-1.7%', tone: 'rose' as const },
+    { label: 'Gross Revenue', value: formatMoney(grossRevenue), delta: formatDelta(grossRevenue, previousGrossRevenue), tone: 'emerald' as const },
+    { label: 'Net Revenue', value: formatMoney(netRevenue), delta: formatDelta(netRevenue, previousNetRevenue), tone: 'sky' as const },
+    { label: 'GMV', value: formatMoney(gmv), delta: formatDelta(gmv, previousGrossRevenue), tone: 'violet' as const },
+    { label: 'Orders', value: String(filteredOrders.length), delta: formatDelta(filteredOrders.length, previousOrders.length), tone: 'amber' as const },
+    { label: 'Customers', value: String(totalCustomers), delta: formatDelta(totalCustomers, previousUsers.length), tone: 'slate' as const },
+    { label: 'Sellers', value: String(totalSellers), delta: formatDelta(totalSellers, previousSellers.length), tone: 'rose' as const },
+    { label: 'Products', value: String(totalProducts), delta: formatDelta(totalProducts, previousProducts.length), tone: 'sky' as const },
+    { label: 'Refunds', value: formatMoney(refundAmount), delta: formatDelta(refundAmount, previousRefundAmount), tone: 'rose' as const },
   ]
 
   const overview: DashboardOverview = {

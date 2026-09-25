@@ -7,6 +7,7 @@ import { SectionHeader } from '@/components/ui/SectionHeader'
 import { fetchMarketplaceProducts, type MarketplaceProduct } from '@/services/marketplace'
 import { SELLER_REGISTRATION_URL } from '@/config/customer'
 import { formatCurrency } from '@/utils/format'
+import { resolveProductImageUrl } from '@/utils/productImage'
 
 function toProductCard(product: MarketplaceProduct, badge?: string) {
   return {
@@ -87,7 +88,7 @@ export function HomePage() {
           {heroProduct ? (
             <Link to={`/products/${heroProduct.id}`} className="group relative block overflow-hidden rounded-[1.75rem] bg-white/10 p-3 ring-1 ring-white/15">
               <div className="relative overflow-hidden rounded-[1.4rem]">
-                <img src={heroProduct.images?.[0]} alt={heroProduct.name} className="h-[320px] w-full object-cover transition duration-500 group-hover:scale-105 md:h-[380px]" />
+                <img src={resolveProductImageUrl(heroProduct.images?.[0])} alt={heroProduct.name} className="h-[320px] w-full object-cover transition duration-500 group-hover:scale-105 md:h-[380px]" />
               </div>
               <div className="absolute inset-x-7 bottom-7 rounded-2xl bg-white/95 p-4 text-slate-900 shadow-lg">
                 <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-brand-600">Featured pick</p>

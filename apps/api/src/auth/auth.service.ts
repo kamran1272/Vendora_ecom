@@ -5,9 +5,14 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { compare, hash } from 'bcrypt';
+import { createHash, randomBytes } from 'node:crypto';
+import { OAuth2Client } from 'google-auth-library';
+import { generateSecret, generateURI, verify } from 'otplib';
+import * as QRCode from 'qrcode';
 import { AUTH_TOKEN_TTL, UserRole } from '@vendora/shared';
 import { PrismaService } from '@/database/prisma.service';
 import { UsersService } from '@/users/users.service';
+import { MailService } from './mail.service';
 
 @Injectable()
 export class AuthService {
@@ -15,6 +20,7 @@ export class AuthService {
     private jwtService: JwtService,
     private usersService: UsersService,
     private prisma: PrismaService,
+    private mailService: MailService,
   ) {}
 
   private sanitizeUser(user: any) {
@@ -33,6 +39,19 @@ export class AuthService {
     }
 
     return normalizedEmail;
+  }
+
+  private hashLinkToken(token: string) {
+    return createHash('sha256').update(token).digest('hex');
+  }
+
+  private createLinkToken() {
+    const rawToken = randomBytes(32).toString('hex');
+    return { rawToken, tokenHash: this.hashLinkToken(rawToken) };
+  }
+
+  private getWebBaseUrl() {
+    return (process.env.WEB_APP_URL || process.env.CUSTOMER_APP_URL || 'http://localhost:4173').replace(/\/$/, '');
   }
 
   private validatePassword(password: string, fieldName = 'Password') {
@@ -62,7 +81,7 @@ export class AuthService {
     return user;
   }
 
-  private issueTokens(user: any) {
+  private async issueTokens(user: any, database: any = this.prisma) {
     const payload = {
       sub: user.id,
       email: user.email,
@@ -73,20 +92,47 @@ export class AuthService {
     };
 
     const accessToken = this.jwtService.sign(payload, { expiresIn: AUTH_TOKEN_TTL.ACCESS });
-    const refreshToken = this.jwtService.sign(
-      { ...payload, type: 'refresh' },
-      { expiresIn: AUTH_TOKEN_TTL.REFRESH },
-    );
+    const refreshToken = randomBytes(48).toString('hex');
+    await database.refreshSession.create({
+      data: {
+        userId: String(user.id),
+        tokenHash: this.hashLinkToken(refreshToken),
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      },
+    });
 
     return {
       accessToken,
-      access_token: accessToken,
       refreshToken,
-      refresh_token: refreshToken,
       token_type: 'Bearer',
       expires_in: 15 * 60,
       user: this.sanitizeUser(user),
     };
+  }
+
+  private async requireSecondFactor(user: any, code?: string) {
+    if (!user.twoFactorEnabled) return;
+    if (!code) throw new UnauthorizedException('Two-factor authentication code is required.');
+
+    const normalizedCode = String(code).trim();
+    let valid = Boolean((user as any).twoFactorSecret && (await verify({ token: normalizedCode, secret: (user as any).twoFactorSecret })).valid);
+    let backupCodes = (user as any).twoFactorBackupCodes ? JSON.parse((user as any).twoFactorBackupCodes) as string[] : [];
+
+    if (!valid) {
+      for (let index = 0; index < backupCodes.length; index += 1) {
+        if (await compare(normalizedCode, backupCodes[index])) {
+          valid = true;
+          backupCodes = backupCodes.filter((_, backupIndex) => backupIndex !== index);
+          await this.prisma.user.update({
+            where: { id: user.id },
+            data: { twoFactorBackupCodes: JSON.stringify(backupCodes) },
+          });
+          break;
+        }
+      }
+    }
+
+    if (!valid) throw new UnauthorizedException('Invalid two-factor authentication code.');
   }
 
   async register(credentials: any) {
@@ -119,8 +165,24 @@ export class AuthService {
       select: { id: true },
     });
 
+    const { rawToken, tokenHash } = this.createLinkToken();
+    await (this.prisma as any).emailVerificationToken.create({
+      data: {
+        userId: user.id,
+        tokenHash,
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      },
+    });
+    await this.mailService.sendAccountLink(
+      normalizedEmail,
+      'Verify your Vendora email',
+      'Verify your Vendora account',
+      `${this.getWebBaseUrl()}/verify-email/${rawToken}`,
+      'Verify your email',
+    );
+
     return {
-      message: 'Account created',
+      message: 'Account created. Check your email to verify your account.',
       userId: user.id,
     };
   }
@@ -140,6 +202,7 @@ export class AuthService {
       throw new UnauthorizedException('Invalid email or password.');
     }
 
+    await this.requireSecondFactor(user, credentials?.twoFactorCode);
     return this.issueTokens(user);
   }
 
@@ -162,15 +225,30 @@ export class AuthService {
       throw new UnauthorizedException('This account is not allowed to access the admin panel.');
     }
 
+    await this.requireSecondFactor(user, twoFactorCode);
     return this.issueTokens(user);
   }
 
-  async googleLogin(profile: any) {
-    const email = profile?.email || profile?.emails?.[0]?.value;
-    const name = profile?.name || profile?.displayName || 'Google User';
+  async googleLogin(credentials: { idToken?: string }) {
+    const idToken = credentials?.idToken?.trim();
+    const clientId = process.env.GOOGLE_CLIENT_ID?.trim();
+    if (!idToken || !clientId) {
+      throw new UnauthorizedException('A valid Google identity token is required.');
+    }
 
-    if (!email) {
-      throw new BadRequestException('Google profile email is required.');
+    let payload;
+    try {
+      const ticket = await new OAuth2Client(clientId).verifyIdToken({ idToken, audience: clientId });
+      payload = ticket.getPayload();
+    } catch (_error) {
+      throw new UnauthorizedException('Invalid Google identity token.');
+    }
+
+    const email = payload?.email;
+    const name = payload?.name || 'Google User';
+
+    if (!email || payload?.email_verified !== true) {
+      throw new UnauthorizedException('Google account email is not verified.');
     }
 
     const normalizedEmail = email.trim().toLowerCase();
@@ -182,7 +260,7 @@ export class AuthService {
       user = await this.prisma.user.create({
         data: {
           email: normalizedEmail,
-          password: await hash('google-oauth-user', 10),
+          password: await hash(randomBytes(32).toString('hex'), 10),
           name,
           role: UserRole.CUSTOMER,
         },
@@ -197,24 +275,27 @@ export class AuthService {
       throw new BadRequestException('Refresh token is required.');
     }
 
-    let payload: any;
-
-    try {
-      payload = this.jwtService.verify(refreshToken);
-    } catch (_error) {
-      throw new UnauthorizedException('Invalid refresh token.');
+    const session = await (this.prisma as any).refreshSession.findUnique({
+      where: { tokenHash: this.hashLinkToken(refreshToken) },
+      include: { user: true },
+    });
+    if (!session || session.revokedAt || session.expiresAt <= new Date()) {
+      throw new UnauthorizedException('Invalid or expired refresh token.');
     }
 
-    if (payload.type !== 'refresh') {
-      throw new UnauthorizedException('Invalid refresh token.');
-    }
-
-    const user = await this.getActiveUserForAuth((await this.prisma.user.findUnique({ where: { id: String(payload.sub) } }))?.email ?? '');
-    if (!user) {
-      throw new UnauthorizedException('User no longer exists.');
-    }
-
-    return this.issueTokens(user);
+    const user = await this.getActiveUserForAuth(session.user.email);
+    return this.prisma.$transaction(async (transaction) => {
+      const replacement = await this.issueTokens(user, transaction);
+      const replacementSession = await (transaction as any).refreshSession.findUnique({
+        where: { tokenHash: this.hashLinkToken(replacement.refreshToken) },
+        select: { id: true },
+      });
+      await (transaction as any).refreshSession.update({
+        where: { id: session.id },
+        data: { revokedAt: new Date(), replacedById: replacementSession?.id },
+      });
+      return replacement;
+    });
   }
 
   async logout(userId?: string, refreshToken?: string) {
@@ -225,11 +306,10 @@ export class AuthService {
     }
 
     if (refreshToken) {
-      try {
-        this.jwtService.verify(refreshToken);
-      } catch (_error) {
-        // Intentionally ignore invalid refresh tokens on logout and return a clean success response.
-      }
+      await (this.prisma as any).refreshSession.updateMany({
+        where: { tokenHash: this.hashLinkToken(refreshToken), ...(userId ? { userId: String(userId) } : {}), revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
     }
 
     return {
@@ -238,17 +318,59 @@ export class AuthService {
     };
   }
 
-  async verifyEmail(userId: number | string) {
-    const user = await this.prisma.user.findUnique({
-      where: { id: String(userId) },
-    });
-    if (!user) {
-      throw new BadRequestException('User not found.');
+  async setupTwoFactor(userId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: String(userId) } }) as any;
+    if (!user) throw new UnauthorizedException('User not found.');
+
+    const secret = generateSecret();
+    const issuer = process.env.TWO_FACTOR_ISSUER?.trim() || 'Vendora';
+    const otpauthUrl = generateURI({ issuer, label: user.email, secret });
+    await this.prisma.user.update({ where: { id: user.id }, data: { twoFactorSecret: secret, twoFactorEnabled: false } as any });
+    return { secret, otpauthUrl, qrCodeDataUrl: await QRCode.toDataURL(otpauthUrl) };
+  }
+
+  async enableTwoFactor(userId: string, code: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: String(userId) } });
+    if (!user?.twoFactorSecret) throw new BadRequestException('Start two-factor setup first.');
+    if (!(await verify({ token: String(code || '').trim(), secret: user.twoFactorSecret })).valid) {
+      throw new UnauthorizedException('Invalid authenticator code.');
     }
 
-    const updated = await this.prisma.user.update({
+    const backupCodes = await Promise.all(Array.from({ length: 10 }, () => hash(randomBytes(8).toString('hex'), 10)));
+    await this.prisma.user.update({
       where: { id: user.id },
-      data: { updatedAt: new Date() },
+      data: { twoFactorEnabled: true, twoFactorBackupCodes: JSON.stringify(backupCodes) } as any,
+    });
+    return { message: 'Two-factor authentication enabled.', backupCodes };
+  }
+
+  async disableTwoFactor(userId: string, code: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: String(userId) } });
+    if (!user) throw new UnauthorizedException('User not found.');
+    await this.requireSecondFactor({ ...user, twoFactorEnabled: true }, code);
+    await this.prisma.user.update({ where: { id: user.id }, data: { twoFactorEnabled: false, twoFactorSecret: null, twoFactorBackupCodes: null } as any });
+    return { message: 'Two-factor authentication disabled.' };
+  }
+
+  async verifyEmail(token: string) {
+    const verificationToken = await (this.prisma as any).emailVerificationToken.findUnique({
+      where: { tokenHash: this.hashLinkToken(token) },
+      include: { user: true },
+    });
+    if (!verificationToken || verificationToken.usedAt || verificationToken.expiresAt <= new Date()) {
+      throw new BadRequestException('This email verification link is invalid or expired.');
+    }
+
+    const updated = await this.prisma.$transaction(async (transaction) => {
+      const user = await transaction.user.update({
+        where: { id: verificationToken.userId },
+        data: { emailVerified: true },
+      });
+      await (transaction as any).emailVerificationToken.update({
+        where: { id: verificationToken.id },
+        data: { usedAt: new Date() },
+      });
+      return user;
     });
 
     return {
@@ -271,21 +393,25 @@ export class AuthService {
       };
     }
 
-    const resetToken = `${user.id}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    const hashedToken = await hash(resetToken, 10);
-
-    await this.prisma.user.update({
-      where: { id: user.id },
+    const { rawToken, tokenHash } = this.createLinkToken();
+    await (this.prisma as any).passwordResetToken.deleteMany({ where: { userId: user.id, usedAt: null } });
+    await (this.prisma as any).passwordResetToken.create({
       data: {
-        passwordResetToken: hashedToken,
-        passwordResetExpires: new Date(Date.now() + 60 * 60 * 1000),
+        userId: user.id,
+        tokenHash,
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
       },
     });
+    await this.mailService.sendAccountLink(
+      user.email,
+      'Reset your Vendora password',
+      'Reset your Vendora password',
+      `${this.getWebBaseUrl()}/reset-password/${rawToken}`,
+      'Reset your password',
+    );
 
     return {
       message: 'Password reset instructions have been sent to your email.',
-      resetToken: undefined,
-      resetTokenHint: 'Store the raw token server-side and email the reset link only.',
     };
   }
 
@@ -296,36 +422,25 @@ export class AuthService {
 
     this.validatePassword(newPassword, 'New password');
 
-    const userRecords = await this.prisma.user.findMany({
-      where: {
-        passwordResetToken: { not: null },
-        passwordResetExpires: { gt: new Date() },
-      },
+    const resetRecord = await (this.prisma as any).passwordResetToken.findUnique({
+      where: { tokenHash: this.hashLinkToken(token) },
     });
-
-    const matchedUser = await (async () => {
-      for (const candidate of userRecords) {
-        if (!candidate.passwordResetToken) continue;
-        const valid = await compare(token, candidate.passwordResetToken);
-        if (valid) return candidate;
-      }
-      return null;
-    })();
-
-    if (!matchedUser) {
+    if (!resetRecord || resetRecord.usedAt || resetRecord.expiresAt <= new Date()) {
       throw new UnauthorizedException('Invalid password reset token.');
     }
 
     const hashedPassword = await hash(newPassword, 10);
 
-    await this.prisma.user.update({
-      where: { id: matchedUser.id },
-      data: {
-        password: hashedPassword,
-        passwordResetToken: null,
-        passwordResetExpires: null,
-      },
-    });
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: resetRecord.userId },
+        data: { password: hashedPassword },
+      }),
+      (this.prisma as any).passwordResetToken.update({
+        where: { id: resetRecord.id },
+        data: { usedAt: new Date() },
+      }),
+    ]);
 
     return { message: 'Password reset successfully.' };
   }
@@ -413,10 +528,14 @@ export class AuthService {
       throw new BadRequestException('User not found.');
     }
 
-    return [];
+    return this.prisma.order.findMany({
+      where: { userId: String(userId) },
+      include: { items: true, payment: true, shipment: true },
+      orderBy: { createdAt: 'desc' },
+    });
   }
 
-  async applySellerAccount(userId: number | string, shopName: string) {
+  async applySellerAccount(userId: number | string, shopName: string, phone: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: String(userId) },
     });
@@ -424,16 +543,29 @@ export class AuthService {
       throw new BadRequestException('User not found.');
     }
 
-    await this.prisma.user.update({
-      where: { id: user.id },
-      data: { role: UserRole.SELLER },
+    if (!shopName?.trim() || !phone?.trim()) {
+      throw new BadRequestException('Shop name and phone are required.');
+    }
+
+    const existing = await this.prisma.sellerApplication.findFirst({
+      where: { userId: user.id, status: 'PENDING' },
     });
-    const applicant = user as any;
-    applicant.shopStatus = 'pending';
-    applicant.shopName = shopName;
+    if (existing) {
+      return { message: 'Seller application already exists.', application: existing };
+    }
+
+    const application = await this.prisma.sellerApplication.create({
+      data: {
+        userId: user.id,
+        applicantName: user.name,
+        email: user.email,
+        phone: phone.trim(),
+        shopName: shopName.trim(),
+      },
+    });
     return {
       message: 'Seller application submitted for admin approval.',
-      user: this.sanitizeUser(applicant),
+      application,
     };
   }
 

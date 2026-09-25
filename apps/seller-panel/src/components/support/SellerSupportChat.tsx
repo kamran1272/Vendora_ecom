@@ -1,6 +1,7 @@
 import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { io } from 'socket.io-client'
 import { getSellerMessages, getSellerSupportConversation, markSellerMessagesRead, sendSellerMessage, uploadSellerAttachment, type ChatConversation, type ChatMessage } from '../../services/seller-chat.service'
+import { subscribeToSellerRefresh } from '../../services/sellerRealtime'
 import {
   SellerSupportChatButton,
   SellerSupportChatWindow,
@@ -17,7 +18,7 @@ const allowedMimeTypes = new Set(['application/pdf', 'application/msword', 'appl
 
 function currentUserId() {
   try {
-    return String(JSON.parse(localStorage.getItem('vendora_user') || '{}').id || '')
+    return String(JSON.parse(localStorage.getItem('vendora.seller.user') || '{}').id || '')
   } catch {
     return ''
   }
@@ -82,25 +83,26 @@ export function SellerSupportChat() {
 
   useEffect(() => {
     void loadConversation(true)
-    const timer = window.setInterval(() => void loadConversation(), 8_000)
-    return () => window.clearInterval(timer)
   }, [])
 
   useEffect(() => {
     if (!open || !conversation) return
     void loadMessages(conversation.id)
-    const timer = window.setInterval(() => void loadMessages(conversation.id, false), 5_000)
-    return () => window.clearInterval(timer)
+    return subscribeToSellerRefresh(() => void loadMessages(conversation.id, false))
   }, [open, conversation?.id])
 
   useEffect(() => {
     if (!open || !conversation) return
-    const token = localStorage.getItem('access_token') || localStorage.getItem('accessToken')
+    const token = localStorage.getItem('vendora.seller.access')
     if (!token) return
-    const socket = io((import.meta.env.VITE_SOCKET_URL as string | undefined) || '/ws/chat', { auth: { token }, transports: ['websocket', 'polling'] })
+    const socket = io((import.meta.env.VITE_SOCKET_URL as string | undefined) || '/ws/chat', { auth: { token }, transports: ['websocket'] })
     socket.on('connect', () => socket.emit('joinConversation', { conversationId: conversation.id }))
     socket.on('message:new', (message: ChatMessage) => {
-      if (message.conversationId === conversation.id) void loadMessages(conversation.id, false)
+      if (message.conversationId === conversation.id) {
+        void loadMessages(conversation.id, false)
+        return
+      }
+      void loadConversation(false)
     })
     return () => { socket.disconnect() }
   }, [open, conversation?.id])
@@ -157,17 +159,8 @@ export function SellerSupportChat() {
     }
     setAttachmentState('reading')
     setError('')
-    const reader = new FileReader()
-    reader.onload = () => {
-      setAttachment({ name: file.name, url: String(reader.result), type: file.type.startsWith('image/') ? 'IMAGE' : 'FILE' })
-      setAttachmentState('ready')
-    }
-    reader.onerror = () => {
-      setAttachment(null)
-      setAttachmentState('failed')
-      setError('This attachment could not be prepared. Please try another file.')
-    }
-    reader.readAsDataURL(file)
+    setAttachment({ name: file.name, url: '', file, type: file.type.startsWith('image/') ? 'IMAGE' : 'FILE' })
+    setAttachmentState('ready')
   }
 
   const send = async (event: FormEvent, retryId?: string) => {
@@ -191,10 +184,8 @@ export function SellerSupportChat() {
     setError('')
     let resolvedAttachment = selectedAttachment
     try {
-      if (selectedAttachment?.url.startsWith('data:')) {
-        const attachmentResponse = await fetch(selectedAttachment.url)
-        const attachmentBlob = await attachmentResponse.blob()
-        const uploaded = await uploadSellerAttachment(attachmentBlob, selectedAttachment.name)
+      if (selectedAttachment && !selectedAttachment.url && selectedAttachment.file) {
+        const uploaded = await uploadSellerAttachment(selectedAttachment.file, selectedAttachment.name)
         resolvedAttachment = { ...selectedAttachment, name: uploaded.filename, url: uploaded.url }
       }
       const sent = await sendSellerMessage(conversation.id, { ...payload, attachmentType: resolvedAttachment?.type || null, attachmentUrl: resolvedAttachment?.url || null, attachmentName: resolvedAttachment?.name || null })

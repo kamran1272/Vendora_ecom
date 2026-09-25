@@ -45,8 +45,9 @@ export class SettingsService {
       taxExemptThreshold: 0,
     },
     commission: {
-      platformCommission: 12,
-      sellerCommission: 88,
+      marketplaceCommissionRate: 10,
+      platformCommission: 10,
+      sellerCommission: 90,
       affiliateCommission: 5,
       refundCommissionWaiver: true,
       minPayout: 25,

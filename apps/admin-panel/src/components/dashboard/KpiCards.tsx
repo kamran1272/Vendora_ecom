@@ -13,7 +13,7 @@ export function KpiCards({ items }: KpiCardsProps) {
             <span className="text-sm text-slate-500">{item.label}</span>
             <span
               className={`rounded-full px-2 py-1 text-[11px] font-semibold ${
-                item.delta.startsWith('+')
+                item.delta !== 'N/A' && item.delta.startsWith('+')
                   ? item.tone === 'emerald'
                     ? 'bg-emerald-100 text-emerald-700'
                     : item.tone === 'sky'
@@ -22,7 +22,7 @@ export function KpiCards({ items }: KpiCardsProps) {
                   : 'bg-rose-100 text-rose-700'
               }`}
             >
-              {item.delta}
+              {item.delta === 'N/A' ? 'No comparison' : item.delta}
             </span>
           </div>
           <p className="mt-4 text-3xl font-bold tracking-tight text-slate-900">{item.value}</p>

@@ -89,6 +89,12 @@ export function AdminRoutes() {
             title="Marketplace product moderation"
             description="Review seller listings, inventory health, approval status, and storefront visibility across the marketplace."
             fetcher={getAdminProducts}
+            productCards
+            bulkActions={[
+              { label: 'Bulk approve', tone: 'primary', onClick: async (row) => { await approveProduct(String(row.id ?? '')) } },
+              { label: 'Bulk reject', tone: 'danger', onClick: async (row) => { await rejectProduct(String(row.id ?? '')) } },
+              { label: 'Bulk suspend', tone: 'secondary', onClick: async (row) => { await suspendProduct(String(row.id ?? '')) } },
+            ]}
             columns={[
               { key: 'image', label: 'Image', render: (value) => {
                   const src = typeof value === 'string' ? value : Array.isArray((value as any)) ? (value as string[])[0] : ((value as any)?.[0] ?? '')
@@ -129,7 +135,6 @@ export function AdminRoutes() {
                 tone: 'primary',
                 onClick: async (row) => {
                   await approveProduct(String(row.id ?? ''))
-                  window.location.reload()
                 },
               },
               {
@@ -137,28 +142,24 @@ export function AdminRoutes() {
                 tone: 'danger',
                 onClick: async (row) => {
                   await rejectProduct(String(row.id ?? ''))
-                  window.location.reload()
                 },
               },
               {
                 label: 'Suspend',
                 onClick: async (row) => {
                   await suspendProduct(String(row.id ?? ''))
-                  window.location.reload()
                 },
               },
               {
                 label: 'Feature',
                 onClick: async (row) => {
                   await featureProduct(String(row.id ?? ''))
-                  window.location.reload()
                 },
               },
               {
                 label: 'Archive',
                 onClick: async (row) => {
                   await archiveProduct(String(row.id ?? ''))
-                  window.location.reload()
                 },
               },
               {
@@ -166,7 +167,6 @@ export function AdminRoutes() {
                 tone: 'danger',
                 onClick: async (row) => {
                   await deleteProduct(String(row.id ?? ''))
-                  window.location.reload()
                 },
               },
             ]}

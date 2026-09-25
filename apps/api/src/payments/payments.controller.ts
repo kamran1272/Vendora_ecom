@@ -10,6 +10,16 @@ import { PaymentsService } from './payments.service';
 export class PaymentsController {
   constructor(private paymentsService: PaymentsService) {}
 
+  @Get('methods')
+  getAvailableMethods() {
+    return this.paymentsService.getAvailableMethods();
+  }
+
+  @Post('checkout-session')
+  createCheckoutSession(@Req() req: any, @Body() payload: { orderId: string; method: string }) {
+    return this.paymentsService.createCheckoutSession(String(payload.orderId), String(req.user.userId), String(payload.method));
+  }
+
   @Post()
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
@@ -39,8 +49,8 @@ export class PaymentsController {
   }
 
   @Get('order/:orderId')
-  getPaymentStatus(@Param('orderId') orderId: string) {
-    return this.paymentsService.getPaymentStatus(orderId);
+  getPaymentStatus(@Req() req: any, @Param('orderId') orderId: string) {
+    return this.paymentsService.getPaymentStatus(orderId, req.user);
   }
 
   @Post(':orderId/refund')

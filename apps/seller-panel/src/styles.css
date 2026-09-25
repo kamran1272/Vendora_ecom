@@ -17,6 +17,13 @@
   --seller-metric-size: clamp(1.75rem, 2vw, 2.25rem);
   --seller-body-size: 0.875rem;
   --seller-secondary-size: 0.8125rem;
+  --seller-navy: #102451;
+  --seller-orange: #ff7612;
+  --seller-orange-dark: #e85f00;
+  --seller-bg: #f4f6fb;
+  --seller-surface: #ffffff;
+  --seller-border: #e2e8f0;
+  --seller-shadow: 0 14px 32px rgb(15 23 42 / 0.045);
 }
 
 html {
@@ -41,7 +48,7 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
-  background: #f8fafc;
+  background: var(--seller-bg);
 }
 
 #root {
@@ -103,6 +110,18 @@ textarea {
   border-radius: 0.625rem;
 }
 
+input::placeholder,
+textarea::placeholder {
+  color: #94a3b8;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--seller-orange) !important;
+  box-shadow: 0 0 0 4px rgb(255 118 18 / 0.12);
+}
+
 .line-clamp-2 {
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -133,6 +152,70 @@ textarea {
 .seller-secondary {
   font-size: var(--seller-secondary-size);
   line-height: 1.4;
+}
+
+.seller-shell {
+  background: var(--seller-bg);
+}
+
+.seller-shell main {
+  background: var(--seller-bg) !important;
+}
+
+.seller-shell :is(.rounded-2xl, .rounded-3xl) {
+  border-color: rgb(226 232 240 / 0.88);
+  box-shadow: var(--seller-shadow);
+}
+
+.seller-shell :is(input, select, textarea) {
+  border-color: var(--seller-border);
+  background: #f8fafc;
+  color: #17233f;
+}
+
+.seller-shell :is(input, select, textarea):focus {
+  border-color: var(--seller-orange) !important;
+  background: #fff;
+  box-shadow: 0 0 0 4px rgb(255 118 18 / 0.12);
+}
+
+.seller-shell table thead th {
+  background: #f5f8fc;
+  border-bottom: 1px solid var(--seller-border);
+  color: #64748b;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.seller-shell table tbody tr {
+  border-top: 1px solid #eef2f7;
+  transition: background-color 160ms ease;
+}
+
+.seller-shell table tbody tr:hover {
+  background: #fbfdff;
+}
+
+.seller-shell :is(button, a) {
+  transition: transform 160ms ease, box-shadow 160ms ease, background-color 160ms ease, border-color 160ms ease;
+}
+
+.seller-shell :is(button, a):not(:disabled):hover {
+  transform: translateY(-1px);
+}
+
+.seller-shell main > div > header,
+.seller-shell main > section > header {
+  border-color: rgb(199 210 254 / 0.8);
+  background: linear-gradient(135deg, #ffffff 0%, #eef2ff 58%, #fff7ed 100%);
+  box-shadow: 0 14px 34px rgb(15 23 42 / 0.06);
+}
+
+.seller-shell main h1,
+.seller-shell main h2 {
+  color: var(--seller-navy);
 }
 
 @media (max-width: 1023px) {

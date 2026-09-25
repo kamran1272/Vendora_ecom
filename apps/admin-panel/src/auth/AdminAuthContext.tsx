@@ -19,11 +19,9 @@ type AdminAuthContextValue = {
   hasAdminAccess: () => boolean
 }
 
-const ADMIN_ACCESS_TOKEN_KEY = 'vendora_admin_access_token'
-const ADMIN_REFRESH_TOKEN_KEY = 'vendora_admin_refresh_token'
-const ADMIN_USER_KEY = 'vendora_admin_user'
-const AUTH_TOKEN_KEYS = ['access_token', 'accessToken'] as const
-
+const ADMIN_ACCESS_TOKEN_KEY = 'vendora.admin.access'
+const ADMIN_REFRESH_TOKEN_KEY = 'vendora.admin.refresh'
+const ADMIN_USER_KEY = 'vendora.admin.user'
 const AdminAuthContext = createContext<AdminAuthContextValue | undefined>(undefined)
 
 function readStoredUser(): AdminUser | null {
@@ -39,20 +37,17 @@ function readStoredUser(): AdminUser | null {
 }
 
 function readStoredToken(): string | null {
-  return localStorage.getItem(ADMIN_ACCESS_TOKEN_KEY) || localStorage.getItem('access_token') || localStorage.getItem('accessToken') || null
+  return localStorage.getItem(ADMIN_ACCESS_TOKEN_KEY)
 }
 
 function readStoredRefreshToken(): string | null {
-  return localStorage.getItem(ADMIN_REFRESH_TOKEN_KEY) || localStorage.getItem('refresh_token') || localStorage.getItem('refreshToken') || null
+  return localStorage.getItem(ADMIN_REFRESH_TOKEN_KEY)
 }
 
 function clearStoredAdminSession() {
   localStorage.removeItem(ADMIN_ACCESS_TOKEN_KEY)
   localStorage.removeItem(ADMIN_REFRESH_TOKEN_KEY)
   localStorage.removeItem(ADMIN_USER_KEY)
-  AUTH_TOKEN_KEYS.forEach((key) => localStorage.removeItem(key))
-  localStorage.removeItem('refresh_token')
-  localStorage.removeItem('refreshToken')
 }
 
 function isAdminRole(role?: string | null) {
@@ -83,13 +78,9 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
     setToken(nextToken)
     localStorage.setItem(ADMIN_USER_KEY, JSON.stringify(nextUser))
     localStorage.setItem(ADMIN_ACCESS_TOKEN_KEY, nextToken)
-    localStorage.setItem('access_token', nextToken)
-    localStorage.setItem('accessToken', nextToken)
 
     if (nextRefreshToken) {
       localStorage.setItem(ADMIN_REFRESH_TOKEN_KEY, nextRefreshToken)
-      localStorage.setItem('refresh_token', nextRefreshToken)
-      localStorage.setItem('refreshToken', nextRefreshToken)
     }
   }
 
@@ -132,15 +123,12 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
     const data = (await response.json()) as {
       user?: AdminUser
       accessToken?: string
-      access_token?: string
       refreshToken?: string
-      refresh_token?: string
-      token?: string
     }
 
     const nextUser = data.user ?? null
-    const nextToken = data.accessToken || data.access_token || data.token
-    const nextRefreshToken = data.refreshToken || data.refresh_token
+    const nextToken = data.accessToken
+    const nextRefreshToken = data.refreshToken
 
     if (!nextUser || !nextToken) {
       throw new Error('Unable to complete admin sign-in.')
@@ -176,14 +164,12 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
       const data = (await response.json()) as {
         user?: AdminUser
         accessToken?: string
-        access_token?: string
         refreshToken?: string
-        refresh_token?: string
       }
 
       const nextUser = data.user || adminUser
-      const nextToken = data.accessToken || data.access_token
-      const nextRefreshToken = data.refreshToken || data.refresh_token
+      const nextToken = data.accessToken
+      const nextRefreshToken = data.refreshToken
 
       if (!nextUser || !nextToken) {
         clearSession()

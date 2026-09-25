@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { hash } from 'bcrypt';
+import { createHash } from 'node:crypto';
 import { AuthService } from './auth.service';
 import { UserRole } from '@/users/users.service';
 
@@ -27,6 +28,7 @@ test('login rejects blocked users', async () => {
     { sign: () => 'token' } as any,
     {} as any,
     prisma as any,
+    {} as any,
   );
 
   await assert.rejects(
@@ -58,10 +60,44 @@ test('login rejects deleted users', async () => {
     { sign: () => 'token' } as any,
     {} as any,
     prisma as any,
+    {} as any,
   );
 
   await assert.rejects(
     () => authService.login({ email: 'deleted@example.com', password }),
     /deleted|inactive/i,
   );
+});
+
+test('email verification marks the user as verified', async () => {
+  const rawToken = 'verification-token';
+  let verified = false;
+  const prisma = {
+    emailVerificationToken: {
+      findUnique: async () => ({
+        id: 'verification-1',
+        userId: 'user-3',
+        tokenHash: createHash('sha256').update(rawToken).digest('hex'),
+        expiresAt: new Date(Date.now() + 60_000),
+        usedAt: null,
+        user: { id: 'user-3', email: 'customer@example.com', emailVerified: false },
+      }),
+    },
+    $transaction: async (callback: (transaction: any) => Promise<unknown>) => callback({
+      user: {
+        update: async () => {
+          verified = true;
+          return { id: 'user-3', email: 'customer@example.com', emailVerified: true };
+        },
+      },
+      emailVerificationToken: {
+        update: async () => ({}),
+      },
+    }),
+  };
+
+  const authService = new AuthService({ sign: () => 'token' } as any, {} as any, prisma as any, {} as any);
+  await authService.verifyEmail(rawToken);
+
+  assert.equal(verified, true);
 });

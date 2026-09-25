@@ -67,13 +67,38 @@ function formatDate(value?: string) {
 
 function normalizeImages(value?: string | string[] | null): string[] {
   if (!value) return []
-  if (Array.isArray(value)) return value.filter(Boolean)
-  try {
-    const parsed = JSON.parse(value as string)
-    return Array.isArray(parsed) ? parsed.filter(Boolean) : String(value).trim() ? [String(value)] : []
-  } catch {
-    return String(value).trim() ? [String(value)] : []
+  const result: string[] = []
+  const collect = (candidate: unknown) => {
+    if (!candidate) return
+    if (Array.isArray(candidate)) {
+      candidate.forEach(collect)
+      return
+    }
+    if (typeof candidate === 'object') {
+      const record = candidate as Record<string, unknown>
+      collect(record.url ?? record.src ?? record.path ?? record.imageUrl)
+      return
+    }
+    if (typeof candidate !== 'string') return
+    const trimmed = candidate.trim()
+    if (!trimmed) return
+    try {
+      const parsed = JSON.parse(trimmed)
+      if (parsed !== candidate) {
+        collect(parsed)
+        return
+      }
+    } catch {
+      // Keep ordinary URLs and paths as-is.
+    }
+    if (!result.includes(trimmed)) result.push(trimmed)
   }
+  collect(value)
+  return result
+}
+
+function fallbackImage(name?: string) {
+  return `https://placehold.co/900x700/eef2ff/102451?text=${encodeURIComponent(name?.slice(0, 28) || 'Vendora product')}`
 }
 
 function getRiskScore(record: ProductModerationRecord) {
@@ -118,7 +143,10 @@ export function ProductModerationDetailPage() {
     description: '',
   })
 
-  const imageList = useMemo(() => normalizeImages(record.images ?? record.image), [record])
+  const imageList = useMemo(() => {
+    const normalized = normalizeImages(record.images ?? record.image)
+    return normalized.length ? normalized : [fallbackImage(record.name)]
+  }, [record])
   const status = String(record.status ?? record.warehouseStatus ?? 'PENDING').toUpperCase()
   const riskScore = useMemo(() => getRiskScore(record), [record])
   const timeline = useMemo<TimelineItem[]>(() => {

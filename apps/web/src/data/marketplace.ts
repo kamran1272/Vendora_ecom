@@ -5,14 +5,16 @@ export type HeaderNavItem = {
   enabled: boolean
 }
 
+import { ADMIN_PANEL_URL, SELLER_PANEL_URL } from '@/config/customer'
+
 export const apiNavigationItems: HeaderNavItem[] = [
   { id: 'home', label: 'Home', href: '/', enabled: true },
   { id: 'categories', label: 'Categories', href: '/categories', enabled: true },
   { id: 'brands', label: 'Brands', href: '/brands', enabled: true },
   { id: 'products', label: 'Products', href: '/products', enabled: true },
-  { id: 'seller', label: 'Seller', href: '/seller', enabled: true },
+  { id: 'seller', label: 'Seller', href: `${SELLER_PANEL_URL}/seller`, enabled: true },
   { id: 'register-shop', label: 'Register Your Shop', href: '/shops/create', enabled: true },
-  { id: 'admin', label: 'Admin', href: '/admin', enabled: true }
+  { id: 'admin', label: 'Admin', href: `${ADMIN_PANEL_URL}/admin`, enabled: true }
 ]
 
 export const headerActions = [
@@ -155,7 +157,7 @@ export const homepageConfig: HomepageSectionConfig[] = [
       'Payout and commission controls'
     ],
     cta: { label: 'Register your shop', href: '/shops/create' },
-    secondaryCta: { label: 'Seller dashboard', href: '/seller' }
+    secondaryCta: { label: 'Seller dashboard', href: `${SELLER_PANEL_URL}/seller` }
   },
   {
     id: 'footer-cta',

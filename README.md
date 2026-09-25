@@ -49,7 +49,7 @@ npx prisma migrate deploy --schema prisma/schema.prisma
 npm run seed:run
 ```
 
-The local database is `apps/api/data/dev.sqlite`. Set `ADMIN_INITIAL_PASSWORD` before seeding if the seed requires an initial administrator password. Never reuse development credentials in production.
+Create the administrator explicitly with `npm run admin:create` from `apps/api`, using required `ADMIN_INITIAL_EMAIL` and `ADMIN_INITIAL_PASSWORD` environment variables. The command refuses to overwrite an existing administrator. Run `npm run seed:run` only after the administrator exists and set `SEED_USER_PASSWORD` for development fixture users. Never reuse development credentials in production.
 
 ## Run locally
 

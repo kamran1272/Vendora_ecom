@@ -5,9 +5,7 @@ import { BrandLogo } from '../../components/BrandLogo'
 
 type LoginResponse = {
   accessToken?: string
-  access_token?: string
   refreshToken?: string
-  refresh_token?: string
   user?: { role?: string; name?: string; email?: string }
 }
 
@@ -25,11 +23,11 @@ export function SellerLoginPage() {
 
     try {
       const { data } = await api.post<LoginResponse>('/auth/login', { email, password })
-      const token = data.accessToken || data.access_token
+      const token = data.accessToken
       if (!token) throw new Error('The login response did not include an access token.')
       if (data.user?.role && data.user.role !== 'SELLER') throw new Error('This account is not registered as a seller.')
       persistSellerSession(token, data.user)
-      persistSellerRefreshToken(data.refreshToken || data.refresh_token)
+      persistSellerRefreshToken(data.refreshToken)
       navigate('/seller/dashboard', { replace: true })
     } catch (loginError: any) {
       setError(loginError?.response?.data?.message || loginError?.message || 'Unable to sign in.')

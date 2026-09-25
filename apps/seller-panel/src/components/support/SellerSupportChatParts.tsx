@@ -2,7 +2,7 @@ import { ChangeEvent, FormEvent, RefObject, useEffect, useState } from 'react'
 import { Check, CheckCheck, Download, FileText, Image as ImageIcon, Loader2, Maximize2, MessageCircle, Minimize2, Paperclip, Send, Smile, X } from 'lucide-react'
 import { fetchSellerAttachment, type ChatMessage } from '../../services/seller-chat.service'
 
-export type SellerAttachment = { name: string; url: string; type: 'IMAGE' | 'FILE' }
+export type SellerAttachment = { name: string; url: string; type: 'IMAGE' | 'FILE'; file?: File }
 export type SellerAttachmentState = 'idle' | 'reading' | 'ready' | 'failed'
 export type SellerFailedMessage = { content: string; attachment: SellerAttachment | null }
 

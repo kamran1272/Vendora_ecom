@@ -5,6 +5,7 @@ import { SellerSidebar } from '../sidebar/SellerSidebar'
 import type { ReactNode } from 'react'
 import { useSellerLanguage } from '../../i18n/sellerLanguage'
 import { SellerSupportChat } from '../support/SellerSupportChat'
+import { startSellerRefreshCoordinator } from '../../services/sellerRealtime'
 
 export type SellerPageLayoutProps = {
   title: string
@@ -38,8 +39,10 @@ export function SellerPageLayout({ title, subtitle, actions, breadcrumbs, childr
     setMobileOpen(false)
   }, [location.pathname])
 
+  useEffect(() => startSellerRefreshCoordinator(), [])
+
   return (
-    <div className="min-h-screen bg-[#f8fafc] text-slate-800">
+    <div className="seller-shell min-h-screen bg-[#f8fafc] text-slate-800">
       <div className="flex h-screen min-w-0 overflow-hidden">
         <div className="xl:hidden">
           {mobileOpen ? (

@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import Stripe from 'stripe';
 import { PrismaService } from '../database/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 
@@ -6,35 +7,133 @@ import { NotificationsService } from '../notifications/notifications.service';
 export class PaymentsService {
   constructor(private readonly prisma: PrismaService, private readonly notificationsService: NotificationsService) {}
 
-  async processPayment(paymentData: any) {
-    const amount = Number(paymentData?.amount ?? 0);
+  private configured(value?: string) {
+    return Boolean(value && !value.includes('your_') && !value.includes('replace-with'));
+  }
 
-    if (!amount || amount <= 0) {
-      throw new BadRequestException('Payment amount must be greater than zero.');
+  private async createPayPalOrder(order: { id: string; total: unknown; currency: string }, userId: string) {
+    const clientId = process.env.PAYPAL_CLIENT_ID!;
+    const clientSecret = process.env.PAYPAL_CLIENT_SECRET!;
+    const baseUrl = process.env.PAYPAL_MODE === 'live' ? 'https://api-m.paypal.com' : 'https://api-m.sandbox.paypal.com';
+    const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
+    const tokenResponse = await fetch(`${baseUrl}/v1/oauth2/token`, { method: 'POST', headers: { Authorization: `Basic ${credentials}`, 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'grant_type=client_credentials' });
+    if (!tokenResponse.ok) throw new BadRequestException('PayPal authentication failed.');
+    const token = (await tokenResponse.json() as { access_token?: string }).access_token;
+    if (!token) throw new BadRequestException('PayPal did not return an access token.');
+    const orderResponse = await fetch(`${baseUrl}/v2/checkout/orders`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ intent: 'CAPTURE', purchase_units: [{ reference_id: order.id, amount: { currency_code: order.currency, value: Number(order.total).toFixed(2) }, custom_id: userId }], application_context: { return_url: `${process.env.PUBLIC_WEB_URL || 'http://localhost:4173'}/account/orders/${order.id}?payment=success`, cancel_url: `${process.env.PUBLIC_WEB_URL || 'http://localhost:4173'}/checkout?payment=cancelled` } }) });
+    if (!orderResponse.ok) throw new BadRequestException('PayPal could not create the payment order.');
+    const paypalOrder = await orderResponse.json() as { id?: string; links?: Array<{ rel?: string; href?: string }> };
+    const approvalUrl = paypalOrder.links?.find((link) => link.rel === 'approve')?.href;
+    if (!paypalOrder.id || !approvalUrl) throw new BadRequestException('PayPal did not return an approval URL.');
+    return { id: paypalOrder.id, approvalUrl };
+  }
+
+  getAvailableMethods() {
+    return [
+      { id: 'card', label: 'Credit or debit card', provider: 'stripe', configured: this.configured(process.env.STRIPE_SECRET_KEY) },
+      { id: 'paypal', label: 'PayPal', provider: 'paypal', configured: this.configured(process.env.PAYPAL_CLIENT_ID) && this.configured(process.env.PAYPAL_CLIENT_SECRET) },
+      { id: 'cod', label: 'Cash on delivery', provider: 'cash_on_delivery', configured: true },
+      { id: 'upi', label: 'UPI', provider: 'razorpay', configured: this.configured(process.env.RAZORPAY_KEY_ID) && this.configured(process.env.RAZORPAY_KEY_SECRET) },
+      { id: 'binance_pay', label: 'Binance Pay', provider: 'binance_pay', configured: this.configured(process.env.BINANCE_PAY_API_KEY) && this.configured(process.env.BINANCE_PAY_SECRET_KEY) },
+      { id: 'bitcoin', label: 'Bitcoin', provider: 'btcpay', configured: this.configured(process.env.BTCPAY_API_URL) && this.configured(process.env.BTCPAY_API_KEY) },
+    ];
+  }
+
+  async createCheckoutSession(orderId: string, userId: string, method: string) {
+    const order = await this.prisma.order.findFirst({ where: { id: orderId, userId }, include: { items: true, payment: true } });
+    if (!order || !order.payment) throw new BadRequestException('Order payment could not be initialized.');
+    if (order.payment.status === 'PAID') throw new BadRequestException('This order is already paid.');
+    if (method === 'cod') {
+      await this.prisma.$transaction([
+        this.prisma.payment.update({ where: { id: order.payment.id }, data: { method: 'cod', gateway: 'cash_on_delivery', status: 'PENDING' } }),
+        this.prisma.order.update({ where: { id: order.id }, data: { paymentMethod: 'cod', status: 'PENDING' } }),
+        this.prisma.orderStatusHistory.create({ data: { orderId: order.id, status: 'PENDING', note: 'Cash on delivery selected' } }),
+      ]);
+      return { provider: 'cash_on_delivery', status: 'PENDING' };
+    }
+    if (method === 'paypal') {
+      if (!this.configured(process.env.PAYPAL_CLIENT_ID) || !this.configured(process.env.PAYPAL_CLIENT_SECRET)) throw new BadRequestException('PayPal is not configured.');
+      const paypalOrder = await this.createPayPalOrder(order, userId);
+      await this.prisma.payment.update({ where: { id: order.payment.id }, data: { method: 'paypal', gateway: 'paypal', status: 'REQUIRES_ACTION', transactionId: paypalOrder.id } });
+      return { provider: 'paypal', sessionId: paypalOrder.id, redirectUrl: paypalOrder.approvalUrl, status: 'REQUIRES_ACTION' };
+    }
+    if (method !== 'card') throw new BadRequestException('This payment provider is not configured yet.');
+    if (!this.configured(process.env.STRIPE_SECRET_KEY)) throw new BadRequestException('Card payments are not configured. Add STRIPE_SECRET_KEY to the API environment.');
+
+    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2024-09-30.acacia' });
+    const publicWebUrl = process.env.PUBLIC_WEB_URL?.trim() || 'http://localhost:4173';
+    const session = await stripe.checkout.sessions.create({
+      mode: 'payment',
+      line_items: order.items.map((item) => ({ price_data: { currency: order.currency.toLowerCase(), product_data: { name: item.name }, unit_amount: Math.round(Number(item.price) * 100) }, quantity: item.quantity })),
+      metadata: { orderId: order.id, userId },
+      success_url: `${publicWebUrl}/account/orders/${order.id}?payment=success`,
+      cancel_url: `${publicWebUrl}/checkout?payment=cancelled`,
+    });
+
+    await this.prisma.payment.update({ where: { id: order.payment.id }, data: { method: 'card', gateway: 'stripe', status: 'REQUIRES_ACTION', transactionId: session.id } });
+    return { provider: 'stripe', sessionId: session.id, redirectUrl: session.url, status: 'REQUIRES_ACTION' };
+  }
+
+  async handleStripeWebhook(signature: string | undefined, rawBody: Buffer) {
+    if (!this.configured(process.env.STRIPE_SECRET_KEY) || !this.configured(process.env.STRIPE_WEBHOOK_SECRET)) {
+      throw new BadRequestException('Stripe webhook is not configured.');
     }
 
+    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2024-09-30.acacia' });
+    let event: Stripe.Event;
+    try {
+      event = stripe.webhooks.constructEvent(rawBody, signature || '', process.env.STRIPE_WEBHOOK_SECRET!);
+    } catch {
+      throw new BadRequestException('Invalid Stripe webhook signature.');
+    }
+
+    if (event.type === 'checkout.session.completed') {
+      const session = event.data.object as Stripe.Checkout.Session;
+      const orderId = session.metadata?.orderId;
+      if (orderId) {
+        await this.prisma.$transaction(async (tx) => {
+          const payment = await tx.payment.findUnique({ where: { orderId } });
+          if (!payment || payment.status === 'PAID') return;
+          await tx.payment.update({ where: { id: payment.id }, data: { status: 'PAID', transactionId: String(session.payment_intent || session.id), rawResponse: JSON.stringify(session) } });
+          await tx.order.update({ where: { id: orderId }, data: { status: 'PAID' } });
+          await tx.orderStatusHistory.create({ data: { orderId, status: 'PAID', note: 'Stripe Checkout payment confirmed' } });
+        });
+      }
+    }
+
+    return { received: true };
+  }
+
+  async processPayment(paymentData: any) {
+    const orderId = String(paymentData?.orderId || '');
+    if (!orderId) throw new BadRequestException('Order ID is required.');
+    const order = await this.prisma.order.findUnique({ where: { id: orderId } });
+    if (!order) throw new BadRequestException('Order not found.');
+    const amount = Number(order.total);
+    if (!amount || amount <= 0) throw new BadRequestException('Order total must be positive.');
+
     const payment = await this.prisma.payment.upsert({
-      where: { orderId: String(paymentData?.orderId) },
+      where: { orderId },
       update: {
         amount,
-        fee: Number(paymentData?.fee ?? 0),
-        commission: Number(paymentData?.commission ?? 0),
-        method: paymentData?.method || 'stripe',
-        status: paymentData?.status || 'COMPLETED',
-        gateway: paymentData?.gateway || 'stripe',
-        transactionId: paymentData?.transactionId || null,
-        rawResponse: paymentData?.rawResponse ? JSON.stringify(paymentData.rawResponse) : null,
+        fee: 0,
+        commission: 0,
+        method: order.paymentMethod || 'stripe',
+        status: 'PENDING',
+        gateway: 'server_pending',
+        transactionId: null,
+        rawResponse: null,
       },
       create: {
-        orderId: String(paymentData?.orderId),
+        orderId,
         amount,
-        fee: Number(paymentData?.fee ?? 0),
-        commission: Number(paymentData?.commission ?? 0),
-        method: paymentData?.method || 'stripe',
-        status: paymentData?.status || 'COMPLETED',
-        gateway: paymentData?.gateway || 'stripe',
-        transactionId: paymentData?.transactionId || null,
-        rawResponse: paymentData?.rawResponse ? JSON.stringify(paymentData.rawResponse) : null,
+        fee: 0,
+        commission: 0,
+        method: order.paymentMethod || 'stripe',
+        status: 'PENDING',
+        gateway: 'server_pending',
+        transactionId: null,
+        rawResponse: null,
       },
     });
 
@@ -42,10 +141,16 @@ export class PaymentsService {
     return payment;
   }
 
-  async getPaymentStatus(orderId: number | string) {
+  async getPaymentStatus(orderId: number | string, actor?: { userId?: string; role?: string }) {
     const payment = await this.prisma.payment.findUnique({
       where: { orderId: String(orderId) },
+      include: { order: { select: { userId: true } } },
     });
+
+    const isAdmin = actor?.role === 'ADMIN' || actor?.role === 'SUPER_ADMIN';
+    if (payment && !isAdmin && payment.order.userId !== String(actor?.userId)) {
+      throw new BadRequestException('Payment record not found.');
+    }
 
     return {
       orderId: String(orderId),
@@ -58,10 +163,19 @@ export class PaymentsService {
   async refund(orderId: number | string) {
     const payment = await this.prisma.payment.findUnique({
       where: { orderId: String(orderId) },
+      include: { order: true },
     });
 
     if (!payment) {
       throw new BadRequestException('Payment record not found.');
+    }
+
+    if (payment.status !== 'PAID') throw new BadRequestException('Only paid orders can be refunded.');
+    if (payment.gateway === 'stripe' && payment.transactionId && this.configured(process.env.STRIPE_SECRET_KEY)) {
+      const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2024-09-30.acacia' });
+      await stripe.refunds.create({ payment_intent: payment.transactionId });
+    } else if (payment.gateway !== 'stripe') {
+      throw new BadRequestException('A refund provider is not configured for this payment.');
     }
 
     const refunded = await this.prisma.payment.update({

@@ -5,10 +5,11 @@ import { PrismaService } from '../database/prisma.service';
 export class ShippingService {
   constructor(private readonly prisma: PrismaService) {}
 
-  calculateShippingCost(weight: number, distance: number) {
-    const baseCost = 5;
-    const weightCost = weight * 0.5;
-    const distanceCost = (distance / 100) * 2;
+  async calculateShippingCost(weight: number, distance: number) {
+    const rules = await (this.prisma as any).commerceConfig.upsert({ where: { id: 'default' }, update: {}, create: { id: 'default' } });
+    const baseCost = Number(rules.shippingPerSeller);
+    const weightCost = Math.max(0, Number(weight || 0)) * 0.5;
+    const distanceCost = Math.max(0, Number(distance || 0)) / 100 * 2;
     return baseCost + weightCost + distanceCost;
   }
 
@@ -18,6 +19,8 @@ export class ShippingService {
     if (!orderId) {
       throw new Error('Order ID is required to create shipment.');
     }
+    const order = await this.prisma.order.findFirst({ where: { id: orderId, userId: String(shipmentData.userId) } });
+    if (!order) throw new Error('Order not found for this customer.');
 
     return this.prisma.shipment.upsert({
       where: { orderId },
@@ -49,9 +52,9 @@ export class ShippingService {
     });
   }
 
-  async trackShipment(shipmentId: number | string) {
-    const shipment = await this.prisma.shipment.findUnique({
-      where: { id: String(shipmentId) },
+  async trackShipment(shipmentId: number | string, userId: string) {
+    const shipment = await this.prisma.shipment.findFirst({
+      where: { id: String(shipmentId), order: { userId } },
     });
 
     return {

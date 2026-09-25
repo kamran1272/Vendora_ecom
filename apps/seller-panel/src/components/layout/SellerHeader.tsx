@@ -27,7 +27,7 @@ type SellerSessionUser = {
 
 function getStoredSellerProfile(): SellerSessionUser {
   try {
-    const raw = localStorage.getItem('vendora_user')
+    const raw = localStorage.getItem('vendora.seller.user')
     const parsed = raw ? JSON.parse(raw) : null
     return {
       name: parsed?.name || 'Seller profile unavailable',
@@ -74,7 +74,7 @@ export function SellerHeader({ title, subtitle, breadcrumbs, actions, onToggleSi
     .join('') || 'S'
 
   return (
-    <header className="sticky top-0 z-30 border-b border-[#e2e8f0] bg-white px-3 py-2 shadow-[0_1px_3px_rgba(15,23,42,0.04)] sm:px-4 md:px-6">
+    <header className="seller-page-header sticky top-0 z-30 border-b border-indigo-200/80 bg-gradient-to-r from-white via-indigo-50 to-orange-50 px-3 py-3 shadow-[0_8px_24px_rgba(15,23,42,0.06)] sm:px-4 md:px-6">
       <div className="mx-auto flex w-full max-w-[1800px] items-center justify-between gap-3">
         <div className="flex min-w-0 flex-1 items-center gap-3">
           <button
@@ -87,7 +87,11 @@ export function SellerHeader({ title, subtitle, breadcrumbs, actions, onToggleSi
           </button>
 
           <div className="min-w-0 flex-1">
-            <h1 className="seller-page-title truncate text-[#1e293b]">{title}</h1>
+            <div className="min-w-0">
+              <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.22em] text-indigo-700">Seller workspace</p>
+              <h1 className="seller-page-title truncate text-[#102451]">{title}</h1>
+              {subtitle ? <p className="mt-1 hidden truncate text-xs text-slate-600 md:block">{subtitle}</p> : null}
+            </div>
           </div>
         </div>
 

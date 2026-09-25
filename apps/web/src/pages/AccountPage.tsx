@@ -4,7 +4,7 @@ import { PageShell } from '@/components/common/PageShell'
 import { Card } from '@/components/ui/DesignSystem'
 import { ErrorState, LoadingState } from '@/components/ui/FeedbackState'
 import { apiRequest } from '@/services/api'
-import { useAuth, type AuthUser } from '@/store/auth'
+import { getStoredRefreshToken, useAuth, type AuthUser } from '@/store/auth'
 import { SELLER_REGISTRATION_URL } from '@/config/customer'
 
 const accountLinks = [
@@ -41,7 +41,11 @@ export function AccountPage() {
     return () => { active = false }
   }, [reloadKey])
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await apiRequest('/auth/logout', {
+      method: 'POST',
+      body: JSON.stringify({ refreshToken: getStoredRefreshToken() }),
+    }).catch(() => undefined)
     logout()
     navigate('/login', { replace: true })
   }

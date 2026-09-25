@@ -7,6 +7,7 @@ import { fetchMarketplaceProduct, type MarketplaceProduct } from '@/services/mar
 import { useWishlistStore } from '@/store/wishlist'
 import { useCartStore } from '@/store/cart'
 import { useToastStore } from '@/store/toast'
+import { resolveProductImageUrl } from '@/utils/productImage'
 
 export function WishlistPage() {
   const ids = useWishlistStore((state) => state.ids)
@@ -57,7 +58,7 @@ export function WishlistPage() {
     if (movingId || product.inStock === false) return
     setMovingId(product.id)
     try {
-      await addItem({ id: product.id, name: product.name, price: product.price, shop: product.shop || product.seller, imageUrl: product.images?.[0], quantity: 1 })
+      await addItem({ id: product.id, name: product.name, price: product.price, shop: product.shop || product.seller, imageUrl: resolveProductImageUrl(product.images?.[0]), quantity: 1 })
       removeProduct(product.id, false)
       showToast({ tone: 'success', title: 'Moved to cart', message: `${product.name} was added to your cart.` })
     } catch {
@@ -78,7 +79,7 @@ export function WishlistPage() {
         const oldPrice = product.oldPrice && product.oldPrice > product.price ? product.oldPrice : undefined
         const discount = oldPrice ? Math.round(((oldPrice - product.price) / oldPrice) * 100) : 0
         const seller = product.shop || product.seller
-        return <article key={product.id} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"><div className="relative h-52 bg-slate-100">{product.images?.[0] ? <img src={product.images[0]} alt={product.name} loading="lazy" className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center text-sm text-slate-500">Image unavailable</div>}<div className="absolute left-3 top-3"><DiscountBadge percent={discount} /></div></div><div className="space-y-3 p-5"><div className="flex items-center justify-between gap-2"><StockBadge inStock={product.inStock} /><span className="text-sm text-slate-500">{seller}</span></div><h2 className="text-lg font-bold text-slate-900">{product.name}</h2><RatingStars rating={product.rating} /><PriceDisplay price={product.price} oldPrice={oldPrice} /><div className="flex flex-wrap gap-2 pt-2"><AddToCartButton product={{ id: product.id, name: product.name, price: product.price, shop: seller, imageUrl: product.images?.[0], inStock: product.inStock }} className="flex-1" /><button type="button" onClick={() => void moveToCart(product)} disabled={movingId === product.id || product.inStock === false} className="rounded-xl border border-brand-200 px-3 py-2 text-sm font-semibold text-brand-700 disabled:cursor-not-allowed disabled:opacity-50">{movingId === product.id ? 'Moving...' : 'Move to cart'}</button><button type="button" onClick={() => removeProduct(product.id)} className="rounded-xl border border-rose-200 px-3 py-2 text-sm font-semibold text-rose-700">Remove</button></div></div></article>
+        return <article key={product.id} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"><div className="relative h-52 bg-slate-100">{product.images?.[0] ? <img src={resolveProductImageUrl(product.images[0])} alt={product.name} loading="lazy" className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center text-sm text-slate-500">Image unavailable</div>}<div className="absolute left-3 top-3"><DiscountBadge percent={discount} /></div></div><div className="space-y-3 p-5"><div className="flex items-center justify-between gap-2"><StockBadge inStock={product.inStock} /><span className="text-sm text-slate-500">{seller}</span></div><h2 className="text-lg font-bold text-slate-900">{product.name}</h2><RatingStars rating={product.rating} /><PriceDisplay price={product.price} oldPrice={oldPrice} /><div className="flex flex-wrap gap-2 pt-2"><AddToCartButton product={{ id: product.id, name: product.name, price: product.price, shop: seller, imageUrl: resolveProductImageUrl(product.images?.[0]), inStock: product.inStock }} className="flex-1" /><button type="button" onClick={() => void moveToCart(product)} disabled={movingId === product.id || product.inStock === false} className="rounded-xl border border-brand-200 px-3 py-2 text-sm font-semibold text-brand-700 disabled:cursor-not-allowed disabled:opacity-50">{movingId === product.id ? 'Moving...' : 'Move to cart'}</button><button type="button" onClick={() => removeProduct(product.id)} className="rounded-xl border border-rose-200 px-3 py-2 text-sm font-semibold text-rose-700">Remove</button></div></div></article>
       })}</div>}
     </div>
   )

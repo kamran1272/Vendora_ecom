@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AddToCartButton, DiscountBadge, PriceDisplay, RatingStars, StockBadge, WishlistButton } from '@/components/ui/DesignSystem'
+import { resolveProductImageUrl } from '@/utils/productImage'
 
 type ProductCardProps = {
   product: {
@@ -40,6 +41,8 @@ export function ProductCard({ product }: ProductCardProps) {
   const sellerName = product.shop || product.seller || 'Vendora seller'
   const productId = product.id ?? product.slug ?? product.name
   const productHref = product.id ? `/products/${product.id}` : product.slug ? `/products/${product.slug}` : '/products'
+  const primaryImage = resolveProductImageUrl(product.imageUrl)
+  const hoverImage = resolveProductImageUrl(product.hoverImageUrl)
 
   return (
     <article className="group flex h-full min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition duration-200 hover:-translate-y-1 hover:border-indigo-200 hover:shadow-xl" onMouseEnter={() => setIsHovered(true)} onMouseLeave={() => setIsHovered(false)}>
@@ -48,11 +51,11 @@ export function ProductCard({ product }: ProductCardProps) {
           <div
             className="relative aspect-[4/3] bg-gradient-to-br from-slate-200 via-slate-100 to-slate-50"
           >
-            {product.imageUrl && !imageFailed ? (
+            {primaryImage && !imageFailed ? (
               <>
                 {imageLoading && <div className="absolute inset-0 animate-pulse bg-slate-200" aria-label="Loading product image" />}
                 <img
-                  src={isHovered && product.hoverImageUrl ? product.hoverImageUrl : product.imageUrl}
+                  src={isHovered && hoverImage ? hoverImage : primaryImage}
                   alt={product.name}
                   loading="lazy"
                   onLoad={() => setImageLoading(false)}
@@ -100,7 +103,7 @@ export function ProductCard({ product }: ProductCardProps) {
         <div className="min-h-9"><PriceDisplay price={currentPrice} oldPrice={oldPrice > currentPrice ? oldPrice : undefined} /></div>
 
         <div className="mt-auto flex items-center justify-between gap-3 pt-2">
-          <AddToCartButton product={{ id: productId, name: product.name, price: currentPrice, shop: sellerName, imageUrl: product.imageUrl, inStock: product.inStock }} className="flex-1" />
+          <AddToCartButton product={{ id: productId, name: product.name, price: currentPrice, shop: sellerName, imageUrl: primaryImage, inStock: product.inStock }} className="flex-1" />
         </div>
       </div>
     </article>

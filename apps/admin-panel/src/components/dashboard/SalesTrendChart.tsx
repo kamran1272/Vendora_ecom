@@ -1,5 +1,5 @@
 type SalesTrendChartProps = {
-  values: number[]
+  values: Array<number | { label: string; value: number }>
 }
 
 export function SalesTrendChart({ values }: SalesTrendChartProps) {
@@ -14,15 +14,19 @@ export function SalesTrendChart({ values }: SalesTrendChartProps) {
       </div>
 
       <div className="flex h-56 items-end gap-3">
-        {values.map((value, index) => (
+        {values.map((item, index) => {
+          const value = typeof item === 'number' ? item : item.value
+          const label = typeof item === 'number' ? '' : item.label
+          return (
           <div key={index} className="flex flex-1 flex-col items-center gap-2">
             <div
               className="w-full rounded-t-[18px] bg-gradient-to-t from-violet-600 to-sky-400"
               style={{ height: `${value}%` }}
             />
-            <span className="text-xs text-slate-400">{['J', 'F', 'M', 'A', 'M', 'J', 'J'][index]}</span>
+            <span className="text-xs text-slate-400">{label}</span>
           </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )

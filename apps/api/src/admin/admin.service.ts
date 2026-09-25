@@ -5,6 +5,8 @@ import { PaymentsService } from '../payments/payments.service';
 import { SellersService } from '../sellers/sellers.service';
 import { ProductWarehouseService } from '../product-warehouse/product-warehouse.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { getMarketplaceCommissionConfig } from '../config/marketplace-commission.config';
+import { ORDER_STATUSES, parseKnownStatus } from '@vendora/shared';
 
 @Injectable()
 export class AdminService {
@@ -201,8 +203,6 @@ export class AdminService {
       where: { id: String(id) },
       data: {
         password: hashedPassword,
-        passwordResetToken: null,
-        passwordResetExpires: null,
       },
     });
 
@@ -381,7 +381,7 @@ export class AdminService {
   }
 
   async updateOrderStatus(id: string, status?: string) {
-    const normalizedStatus = String(status || '').toUpperCase();
+    const normalizedStatus = parseKnownStatus(status, ORDER_STATUSES);
     if (!this.orderStatuses.includes(normalizedStatus)) throw new BadRequestException('Invalid order status.');
     const order = await this.prisma.order.findUnique({ where: { id: String(id) } });
     if (!order) throw new BadRequestException('Order not found.');
@@ -487,10 +487,23 @@ export class AdminService {
   }
 
   async getCategories() {
-    return this.prisma.category.findMany({
+    const categories = await this.prisma.category.findMany({
       include: { parent: { select: { id: true, name: true } }, children: { select: { id: true } } },
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
     });
+    return Promise.all(categories.map(async (category) => {
+      const products = await this.prisma.warehouseProduct.findMany({
+        where: { category: category.name },
+        select: { id: true, name: true, images: true, thumbnail: true, status: true },
+        orderBy: { updatedAt: 'desc' },
+        take: 6,
+      });
+      return {
+        ...category,
+        productCount: await this.prisma.warehouseProduct.count({ where: { category: category.name } }),
+        products: products.map((product) => ({ id: product.id, name: product.name, image: this.parseFirstProductImage(product.images, product.thumbnail), status: product.status })),
+      };
+    }));
   }
 
   async createCategory(payload: Record<string, any>) {
@@ -538,7 +551,36 @@ export class AdminService {
 
   async getBrands(search?: string) {
     const brands = await this.prisma.brand.findMany({ where: search?.trim() ? { OR: [{ name: { contains: search.trim() } }, { slug: { contains: search.trim() } }] } : undefined, orderBy: { name: 'asc' } });
-    return Promise.all(brands.map(async (brand) => ({ ...brand, productCount: await this.prisma.warehouseProduct.count({ where: { brand: brand.name } }) })));
+    return Promise.all(brands.map(async (brand) => {
+      const products = await this.prisma.warehouseProduct.findMany({
+        where: { brand: brand.name },
+        select: { id: true, name: true, images: true, thumbnail: true, status: true },
+        orderBy: { updatedAt: 'desc' },
+        take: 6,
+      });
+      return {
+        ...brand,
+        productCount: await this.prisma.warehouseProduct.count({ where: { brand: brand.name } }),
+        products: products.map((product) => ({ id: product.id, name: product.name, image: this.parseFirstProductImage(product.images, product.thumbnail), status: product.status })),
+      };
+    }));
+  }
+
+  private parseFirstProductImage(value: string | null | undefined, thumbnail?: string | null) {
+    if (thumbnail?.trim()) return thumbnail.trim();
+    if (!value) return null;
+    try {
+      const parsed = JSON.parse(value);
+      const first = Array.isArray(parsed) ? parsed[0] : parsed;
+      if (typeof first === 'string' && first.trim()) return first.trim();
+      if (first && typeof first === 'object') {
+        const candidate = (first as Record<string, unknown>).url ?? (first as Record<string, unknown>).src ?? (first as Record<string, unknown>).imageUrl;
+        return typeof candidate === 'string' && candidate.trim() ? candidate.trim() : null;
+      }
+    } catch {
+      return value.trim() || null;
+    }
+    return null;
   }
 
   async createBrand(payload: Record<string, any>) {
@@ -766,8 +808,8 @@ export class AdminService {
 
     const orders = Array.from(new Map(orderItems.map((item) => [item.orderId, item.order])).values());
     const revenue = orders.reduce((sum: number, order: any) => sum + Number(order.total || 0), 0);
-    const commissionRate = 10;
-    const commission = revenue * (commissionRate / 100);
+    const commissionConfig = getMarketplaceCommissionConfig();
+    const commission = revenue * (commissionConfig.marketplaceCommissionRate / 100);
     const balance = revenue - commission;
     const products = Array.isArray(seller.sellerProducts) ? seller.sellerProducts.length : 0;
 
@@ -777,7 +819,7 @@ export class AdminService {
       revenue,
       commission,
       balance,
-      rating: seller.rating ?? 4.8,
+      rating: seller.rating ?? 0,
       joinedAt: seller.createdAt,
       shopName: seller.shop?.name ?? 'Unnamed shop',
       sellerName: seller.user?.name ?? 'Seller',
@@ -907,9 +949,9 @@ export class AdminService {
       })),
       earnings: {
         grossSales: orders.reduce((sum: number, order: any) => sum + Number(order.total || 0), 0),
-        commission: orders.reduce((sum: number, order: any) => sum + Number(order.total || 0), 0) * 0.1,
-        netEarnings: orders.reduce((sum: number, order: any) => sum + Number(order.total || 0), 0) * 0.9,
-        withdrawableBalance: orders.reduce((sum: number, order: any) => sum + Number(order.total || 0), 0) * 0.9,
+        commission: orders.reduce((sum: number, order: any) => sum + Number(order.total || 0), 0) * (getMarketplaceCommissionConfig().marketplaceCommissionRate / 100),
+        netEarnings: orders.reduce((sum: number, order: any) => sum + Number(order.total || 0), 0) * (getMarketplaceCommissionConfig().sellerEarningsRate / 100),
+        withdrawableBalance: orders.reduce((sum: number, order: any) => sum + Number(order.total || 0), 0) * (getMarketplaceCommissionConfig().sellerEarningsRate / 100),
       },
     };
   }
@@ -1009,7 +1051,8 @@ export class AdminService {
 
     const orders = Array.from(new Map(orderItems.map((item) => [item.orderId, item.order])).values());
     const grossSales = orders.reduce((sum: number, order: any) => sum + Number(order.total || 0), 0);
-    const platformCommission = grossSales * 0.1;
+    const commissionConfig = getMarketplaceCommissionConfig();
+    const platformCommission = grossSales * (commissionConfig.marketplaceCommissionRate / 100);
     const netEarnings = grossSales - platformCommission;
 
     return {
@@ -1061,7 +1104,7 @@ export class AdminService {
       price: Number(product.sellingPrice ?? warehouseProduct.basePrice ?? 0),
       stock: Number(warehouseProduct.stock ?? 0),
       sales: Number(product.sales ?? 0),
-      rating: Number(product.rating ?? 4.8),
+      rating: Number(product.rating ?? 0),
       status: String(product.status ?? warehouseProduct.status ?? 'PENDING').toUpperCase(),
       warehouseStatus: String(warehouseProduct.status ?? 'PUBLISHED').toUpperCase(),
       createdAt: product.createdAt ?? warehouseProduct.createdAt ?? new Date().toISOString(),
@@ -1261,8 +1304,8 @@ export class AdminService {
     const product = await this.prisma.sellerProduct.findUnique({ where: { id: String(id) } });
     if (!product) throw new BadRequestException('Product listing not found.');
 
-    await this.prisma.sellerProduct.delete({ where: { id: String(id) } });
-    return { message: 'Product listing deleted successfully.', id: String(id) };
+    await this.prisma.sellerProduct.update({ where: { id: String(id) }, data: { status: 'INACTIVE' } });
+    return { message: 'Product listing deactivated and preserved for commerce history.', id: String(id) };
   }
 
   getSellerApplications() {
@@ -1298,12 +1341,15 @@ export class AdminService {
     const sellers = await this.prisma.seller.findMany({ where: { id: { in: sellerIds } }, include: { user: true, shop: true } });
     const sellerLookup = new Map(sellers.map((seller) => [seller.id, seller.shop?.name ? `${seller.user.name} · ${seller.shop.name}` : seller.user.name]));
     const rows = orders.map((order) => {
-      const amount = Number(order.payment?.amount ?? order.total ?? 0);
+      const grossSales = Number(order.payment?.amount ?? order.total ?? 0);
       const fee = Number(order.payment?.fee ?? 0);
-      const commission = Number(order.payment?.commission ?? amount * 0.1);
       const refunds = order.refundRequests.reduce((sum, refund) => sum + Number(refund.amount), 0);
+      const netSales = Math.max(0, grossSales - refunds);
+      const commissionConfig = getMarketplaceCommissionConfig();
+      const commission = netSales * (commissionConfig.marketplaceCommissionRate / 100);
+      const sellerEarnings = netSales - commission;
       const sellerNames = [...new Set(order.items.map((item) => item.sellerId).filter(Boolean))].map((id) => sellerLookup.get(String(id)) ?? String(id));
-      return { id: order.id, order: order.id, customer: order.user.name, customerEmail: order.user.email, seller: sellerNames.length ? sellerNames.join(', ') : 'Marketplace seller', gmv: amount, sellerEarnings: amount - commission, commission, paymentFees: fee, refunds, netMarketplaceRevenue: commission - fee - refunds, status: order.status, date: order.createdAt };
+      return { id: order.id, order: order.id, customer: order.user.name, customerEmail: order.user.email, seller: sellerNames.length ? sellerNames.join(', ') : 'Marketplace seller', gmv: grossSales, sellerEarnings, commission, paymentFees: fee, refunds, netMarketplaceRevenue: commission - fee, status: order.status, date: order.createdAt };
     });
     return { summary: rows.reduce((summary, row) => ({ gmv: summary.gmv + row.gmv, sellerEarnings: summary.sellerEarnings + row.sellerEarnings, commission: summary.commission + row.commission, paymentFees: summary.paymentFees + row.paymentFees, refunds: summary.refunds + row.refunds, netMarketplaceRevenue: summary.netMarketplaceRevenue + row.netMarketplaceRevenue }), { gmv: 0, sellerEarnings: 0, commission: 0, paymentFees: 0, refunds: 0, netMarketplaceRevenue: 0 }), rows, sellers: sellers.map((seller) => ({ id: seller.id, name: seller.shop?.name ? `${seller.user.name} · ${seller.shop.name}` : seller.user.name })) };
   }

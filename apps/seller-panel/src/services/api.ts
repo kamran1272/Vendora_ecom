@@ -19,26 +19,27 @@ export const api = axios.create({
   },
 })
 
-const SELLER_TOKEN_STORAGE_KEYS = ['access_token', 'accessToken'] as const
-const SELLER_USER_STORAGE_KEY = 'vendora_user'
-
+const SELLER_TOKEN_STORAGE_KEY = 'vendora.seller.access'
+const SELLER_REFRESH_STORAGE_KEY = 'vendora.seller.refresh'
+const SELLER_USER_STORAGE_KEY = 'vendora.seller.user'
 export function getSellerToken() {
-  return localStorage.getItem('access_token') || localStorage.getItem('accessToken') || null
+  return localStorage.getItem(SELLER_TOKEN_STORAGE_KEY)
 }
 
 export function isSellerSession() {
-  if (!getSellerToken()) return false
+  const token = getSellerToken()
+  if (!token) return false
   try {
     const user = JSON.parse(localStorage.getItem(SELLER_USER_STORAGE_KEY) || 'null')
-    return String(user?.role || '').toUpperCase() === 'SELLER'
+    const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')))
+    return String(user?.role || '').toUpperCase() === 'SELLER' && String(payload?.role || '').toUpperCase() === 'SELLER'
   } catch {
     return false
   }
 }
 
 export function persistSellerSession(token: string, user?: SessionUser | null) {
-  localStorage.setItem('access_token', token)
-  localStorage.setItem('accessToken', token)
+  localStorage.setItem(SELLER_TOKEN_STORAGE_KEY, token)
   if (user) {
     localStorage.setItem(SELLER_USER_STORAGE_KEY, JSON.stringify(user))
   }
@@ -46,22 +47,17 @@ export function persistSellerSession(token: string, user?: SessionUser | null) {
 
 export function persistSellerRefreshToken(refreshToken?: string | null) {
   if (!refreshToken) return
-  localStorage.setItem('vendora_seller_refresh_token', refreshToken)
-  localStorage.setItem('refresh_token', refreshToken)
-  localStorage.setItem('refreshToken', refreshToken)
+  localStorage.setItem(SELLER_REFRESH_STORAGE_KEY, refreshToken)
 }
 
 function getSellerRefreshToken() {
-  return localStorage.getItem('vendora_seller_refresh_token') || localStorage.getItem('refresh_token') || localStorage.getItem('refreshToken')
+  return localStorage.getItem(SELLER_REFRESH_STORAGE_KEY)
 }
 
 export function clearSellerSession() {
-  SELLER_TOKEN_STORAGE_KEYS.forEach((key) => localStorage.removeItem(key))
+  localStorage.removeItem(SELLER_TOKEN_STORAGE_KEY)
+  localStorage.removeItem(SELLER_REFRESH_STORAGE_KEY)
   localStorage.removeItem(SELLER_USER_STORAGE_KEY)
-  localStorage.removeItem('vendora-auth')
-  localStorage.removeItem('vendora_seller_refresh_token')
-  localStorage.removeItem('refresh_token')
-  localStorage.removeItem('refreshToken')
 }
 
 api.interceptors.request.use((config) => {
@@ -89,11 +85,11 @@ api.interceptors.response.use(
     if (status === 401 && refreshToken && originalRequest && !originalRequest._authRetry && !/\/auth\/(login|register|refresh)/i.test(String(originalRequest.url || ''))) {
       originalRequest._authRetry = true
       try {
-        const { data } = await api.post<{ accessToken?: string; access_token?: string; refreshToken?: string; refresh_token?: string }>('/auth/refresh', { refreshToken })
-        const nextToken = data.accessToken || data.access_token
+        const { data } = await api.post<{ accessToken?: string; refreshToken?: string }>('/auth/refresh', { refreshToken })
+        const nextToken = data.accessToken
         if (nextToken) {
           persistSellerSession(nextToken)
-          persistSellerRefreshToken(data.refreshToken || data.refresh_token)
+          persistSellerRefreshToken(data.refreshToken)
           originalRequest.headers = originalRequest.headers || {}
           originalRequest.headers.Authorization = `Bearer ${nextToken}`
           return api.request(originalRequest)

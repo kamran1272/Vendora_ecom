@@ -1,4 +1,5 @@
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
+import { io } from 'socket.io-client';
 import {
   CheckCheck,
   Circle,
@@ -14,6 +15,7 @@ import {
   X,
 } from "lucide-react";
 import { SellerLayout } from "../../components/layout/SellerLayout";
+import { subscribeToSellerRefresh } from '../../services/sellerRealtime'
 import {
   deleteSellerChatMessage,
   fetchSellerChatConversations,
@@ -29,7 +31,7 @@ const emojis = ["😀", "👍", "❤️", "🎉", "🙏", "😊", "🔥", "✅"]
 const userId = () => {
   try {
     return String(
-      JSON.parse(localStorage.getItem("vendora_user") || "{}").id || "",
+      JSON.parse(localStorage.getItem("vendora.seller.user") || "{}").id || "",
     );
   } catch {
     return "";
@@ -77,6 +79,7 @@ export function SellerConversationsPage() {
     name: string;
     url: string;
     type: "IMAGE" | "FILE";
+    file?: File;
   } | null>(null);
   const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
   const [failed, setFailed] = useState<Record<string, Failed>>({});
@@ -157,21 +160,32 @@ export function SellerConversationsPage() {
 
   useEffect(() => {
     void loadConversations(true);
-    const timer = window.setInterval(() => void loadConversations(), 8000);
-    return () => window.clearInterval(timer);
+    return subscribeToSellerRefresh(() => void loadConversations(false))
   }, []);
+
   useEffect(() => {
     if (!selectedId) {
       setMessages([]);
       return;
     }
     void loadMessages(selectedId);
-    const timer = window.setInterval(
-      () => void loadMessages(selectedId, false),
-      5000,
-    );
-    return () => window.clearInterval(timer);
+    return subscribeToSellerRefresh(() => void loadMessages(selectedId, false))
   }, [selectedId]);
+
+  useEffect(() => {
+    if (!selectedId) return
+    const token = localStorage.getItem('vendora.seller.access')
+    if (!token) return
+    const socket = io((import.meta.env.VITE_SOCKET_URL as string | undefined) || '/ws/chat', { auth: { token }, transports: ['websocket'] })
+    socket.on('connect', () => socket.emit('joinConversation', { conversationId: selectedId }))
+    socket.on('message:new', (message: ChatMessage) => {
+      if (message.conversationId === selectedId) {
+        void loadMessages(selectedId, false)
+      }
+      void loadConversations(false)
+    })
+    return () => { socket.disconnect() }
+  }, [selectedId])
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages.length]);
@@ -183,14 +197,12 @@ export function SellerConversationsPage() {
       setError("Attachments must be 5 MB or smaller.");
       return;
     }
-    const reader = new FileReader();
-    reader.onload = () =>
-      setAttachment({
-        name: file.name,
-        url: String(reader.result),
-        type: file.type.startsWith("image/") ? "IMAGE" : "FILE",
-      });
-    reader.readAsDataURL(file);
+    setAttachment({
+      name: file.name,
+      url: "",
+      file,
+      type: file.type.startsWith("image/") ? "IMAGE" : "FILE",
+    });
     event.target.value = "";
   };
 
@@ -234,7 +246,14 @@ export function SellerConversationsPage() {
     setSending(true);
     setError("");
     try {
-      const sent = await sendSellerChatMessage(selectedId, payload);
+      const attachmentPayload = attachment && !attachment.url && attachment.file
+        ? await uploadSellerAttachment(attachment.file, attachment.name)
+        : null;
+      const sent = await sendSellerChatMessage(selectedId, {
+        ...payload,
+        attachmentUrl: attachmentPayload?.url || payload.attachmentUrl || null,
+        attachmentName: attachmentPayload?.filename || payload.attachmentName || null,
+      });
       setMessages((items) =>
         items.map((item) => (item.id === optimisticId ? sent : item)),
       );

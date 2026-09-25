@@ -26,7 +26,7 @@ export function CustomerFooter() {
     <footer className="mt-16 border-t border-slate-200 bg-[#1f2d4d] text-slate-200">
       <div className="mx-auto grid max-w-[1500px] gap-10 px-4 py-12 sm:grid-cols-2 lg:grid-cols-4 lg:px-8">
         <div className="sm:col-span-2 lg:col-span-1">
-          <Link to="/" className="inline-flex rounded-lg bg-white px-3 py-2" aria-label="Vendora home"><img src="/Vendora_Logo_Wordmark.png" alt="Vendora" className="h-7 w-[128px] object-contain" /></Link>
+          <Link to="/" className="inline-flex rounded-lg bg-white px-3 py-2" aria-label="Vendora home"><img src={`${import.meta.env.BASE_URL}Vendora_Logo_Wordmark.png`} alt="Vendora" className="h-7 w-[128px] object-contain" /></Link>
           <p className="mt-4 max-w-xs text-sm leading-6 text-slate-300">A connected marketplace for trusted stores, thoughtful shopping, and growing sellers.</p>
           <Link to="/categories" className="mt-5 inline-flex min-h-10 items-center rounded-xl bg-orange-400 px-4 py-2 text-sm font-bold text-slate-950 transition hover:bg-orange-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white">Browse categories</Link>
         </div>

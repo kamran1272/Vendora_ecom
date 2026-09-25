@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Bell, Check, CheckCheck, ChevronRight, CircleDollarSign, CreditCard, FileText, LifeBuoy, Loader2, MessageCircle, Package, RefreshCw, RotateCcw, ShoppingCart, Star } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
+import { subscribeToSellerRefresh } from '../../services/sellerRealtime'
 import { getMyNotifications, markAllNotificationsRead, markNotificationRead } from '../../services/notifications.service'
 
 export type SellerNotification = {
@@ -101,8 +102,7 @@ export function NotificationCenter({ mode = 'dropdown' }: NotificationCenterProp
 
   useEffect(() => {
     void load()
-    const timer = window.setInterval(() => void load(), 15000)
-    return () => window.clearInterval(timer)
+    return subscribeToSellerRefresh(() => void load())
   }, [])
 
   const unreadCount = notifications.filter((item) => !item.readAt).length

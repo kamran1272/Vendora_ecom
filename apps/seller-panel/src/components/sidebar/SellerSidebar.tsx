@@ -6,6 +6,7 @@ import { clearSellerSession } from '../../services/api'
 import { BrandLogo } from '../BrandLogo'
 import { getSellerDashboard } from '../../services/dashboard.service'
 import { fetchSellerChatConversations } from '../../services/chat'
+import { subscribeToSellerRefresh } from '../../services/sellerRealtime'
 import { useSellerLanguage } from '../../i18n/sellerLanguage'
 import {
   BarChart3,
@@ -138,10 +139,10 @@ export function SellerSidebar({ collapsed = false, mobile = false, onClose, onTo
     }
 
     void loadUnreadConversations()
-    const refreshTimer = window.setInterval(() => void loadUnreadConversations(), 8_000)
+    const unsubscribe = subscribeToSellerRefresh(() => void loadUnreadConversations())
     return () => {
       active = false
-      window.clearInterval(refreshTimer)
+      unsubscribe()
     }
   }, [])
 

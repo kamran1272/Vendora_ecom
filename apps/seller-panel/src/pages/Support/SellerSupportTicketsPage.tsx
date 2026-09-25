@@ -4,6 +4,8 @@ import { SellerLayout } from '../../components/layout/SellerLayout'
 import { api } from '../../services/api'
 import { createSellerSupportTicket, getSellerSupportTickets } from '../../services/support.service'
 import { fetchSellerChatMessages, sendSellerChatMessage, type ChatMessage } from '../../services/chat'
+import { uploadSellerAttachment } from '../../services/seller-chat.service'
+import { subscribeToSellerRefresh } from '../../services/sellerRealtime'
 
 type Ticket = { id: string; subject?: string | null; category?: string | null; priority?: string | null; status?: string | null; lastMessageAt?: string | null; createdAt: string; messages?: ChatMessage[] }
 const statusTone = (status: string) => status === 'RESOLVED' || status === 'CLOSED' ? 'bg-emerald-50 text-emerald-700 ring-emerald-200' : status === 'PENDING' ? 'bg-amber-50 text-amber-700 ring-amber-200' : 'bg-sky-50 text-sky-700 ring-sky-200'
@@ -20,21 +22,21 @@ export function SellerSupportTicketsPage() {
   const [notice, setNotice] = useState('')
   const [showCreate, setShowCreate] = useState(false)
   const [draft, setDraft] = useState('')
-  const [attachment, setAttachment] = useState<{ name: string; url: string; type: 'IMAGE' | 'FILE' } | null>(null)
+  const [attachment, setAttachment] = useState<{ name: string; url: string; type: 'IMAGE' | 'FILE'; file?: File } | null>(null)
   const [ticketForm, setTicketForm] = useState({ subject: '', category: 'GENERAL', priority: 'NORMAL', description: '' })
   const fileRef = useRef<HTMLInputElement>(null)
   const createFileRef = useRef<HTMLInputElement>(null)
-  const sellerUserId = (() => { try { return String(JSON.parse(localStorage.getItem('vendora_user') || '{}').id || '') } catch { return '' } })()
+  const sellerUserId = (() => { try { return String(JSON.parse(localStorage.getItem('vendora.seller.user') || '{}').id || '') } catch { return '' } })()
   const selected = useMemo(() => tickets.find((ticket) => ticket.id === selectedId) || null, [tickets, selectedId])
 
   const load = async () => { setLoading(true); setError(''); try { const data = await getSellerSupportTickets<Ticket[]>(); setTickets(data); setSelectedId((current) => current && data.some((ticket) => ticket.id === current) ? current : data[0]?.id || null) } catch (loadError: any) { setError(loadError?.response?.data?.message || loadError?.message || 'Unable to load support tickets.') } finally { setLoading(false) } }
   const loadThread = async (id: string) => { setThreadLoading(true); try { const result = await fetchSellerChatMessages(id); setMessages(result.data) } catch (threadError) { setError(threadError instanceof Error ? threadError.message : 'Unable to load ticket messages.') } finally { setThreadLoading(false) } }
   useEffect(() => { void load() }, [])
   useEffect(() => { if (selectedId) void loadThread(selectedId) }, [selectedId])
-  useEffect(() => { if (!selectedId) return; const timer = window.setInterval(() => void loadThread(selectedId), 6000); return () => window.clearInterval(timer) }, [selectedId])
+  useEffect(() => { if (!selectedId) return; return subscribeToSellerRefresh(() => void loadThread(selectedId)) }, [selectedId])
 
-  const readFile = (event: ChangeEvent<HTMLInputElement>) => { const file = event.target.files?.[0]; if (!file) return; if (file.size > 5 * 1024 * 1024) { setError('Attachments must be 5 MB or smaller.'); return }; const reader = new FileReader(); reader.onload = () => setAttachment({ name: file.name, url: String(reader.result), type: file.type.startsWith('image/') ? 'IMAGE' : 'FILE' }); reader.readAsDataURL(file); event.target.value = '' }
-  const createTicket = async (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); setError(''); setNotice(''); try { await createSellerSupportTicket({ ...ticketForm, attachmentUrl: attachment?.url, attachmentName: attachment?.name }); setTicketForm({ subject: '', category: 'GENERAL', priority: 'NORMAL', description: '' }); setAttachment(null); setShowCreate(false); setNotice('Support ticket created successfully.'); await load() } catch (createError: any) { setError(createError?.response?.data?.message || createError?.message || 'Unable to create support ticket.') } }
+  const readFile = (event: ChangeEvent<HTMLInputElement>) => { const file = event.target.files?.[0]; if (!file) return; if (file.size > 5 * 1024 * 1024) { setError('Attachments must be 5 MB or smaller.'); return }; setAttachment({ name: file.name, url: '', file, type: file.type.startsWith('image/') ? 'IMAGE' : 'FILE' }); event.target.value = '' }
+  const createTicket = async (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); setError(''); setNotice(''); try { let attachmentUrl = attachment?.url || null; let attachmentName = attachment?.name || null; if (attachment && !attachmentUrl && attachment.file) { const upload = await uploadSellerAttachment(attachment.file, attachment.name); attachmentUrl = upload.url; attachmentName = upload.filename; } await createSellerSupportTicket({ ...ticketForm, attachmentUrl, attachmentName }); setTicketForm({ subject: '', category: 'GENERAL', priority: 'NORMAL', description: '' }); setAttachment(null); setShowCreate(false); setNotice('Support ticket created successfully.'); await load() } catch (createError: any) { setError(createError?.response?.data?.message || createError?.message || 'Unable to create support ticket.') } }
   const sendReply = async () => { if (!selectedId || !draft.trim() || sending) return; setSending(true); setError(''); const content = draft.trim(); setDraft(''); try { const message = await sendSellerChatMessage(selectedId, { type: attachment?.type || 'TEXT', content, attachmentUrl: attachment?.url || null, attachmentName: attachment?.name || null }); setMessages((current) => [...current, message]); setAttachment(null); await load() } catch (sendError) { setDraft(content); setError(sendError instanceof Error ? sendError.message : 'Unable to send reply.') } finally { setSending(false) } }
 
   return <SellerLayout title="Support tickets" subtitle="Create and follow up on support requests with the Vendora team." actions={<button type="button" onClick={() => setShowCreate(true)} className="rounded-lg bg-[#2d80d8] px-4 py-2 text-sm font-semibold text-white">Create ticket</button>}>

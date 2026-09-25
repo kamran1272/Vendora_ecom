@@ -1,68 +1,11 @@
-export type ChatConversation = {
-  id: string
-  type: string
-  subject?: string | null
-  status?: string | null
-  priority?: string | null
-  lastMessageAt?: string | null
-  customerId?: string | null
-  sellerId?: string | null
-  shopId?: string | null
-  productId?: string | null
-  orderId?: string | null
-  product?: { id: string; name: string } | null
-  order?: { id: string; status: string; total: number } | null
-  unreadCount?: number
-  online?: boolean
-  typing?: boolean
-  category?: string | null
-  adminNotes?: string | null
-  assignedAdminId?: string | null
-  aiEnabled?: boolean
-  aiActive?: boolean
-  humanTakeover?: boolean
-  metadata?: string | null
-  messages?: Array<{ id: string; content: string | null; createdAt: string; senderRole?: string }>
-  customer?: {
-    id: string
-    name: string
-    email: string
-  } | null
-  seller?: {
-    id: string
-    user?: {
-      id: string
-      name: string
-      email: string
-    }
-  } | null
-  shop?: { id: string; name: string } | null
-}
-
-export type ChatMessage = {
-  id: string
-  conversationId: string
-  senderId: string
-  senderRole?: 'ADMIN' | 'SELLER' | 'CUSTOMER' | 'SYSTEM' | string
-  content: string | null
-  type?: string
-  attachmentUrl?: string | null
-  attachmentName?: string | null
-  readAt?: string | null
-  createdAt: string
-  sender?: {
-    id: string
-    name: string
-    email: string
-  }
-}
+import type { ChatConversation, ChatMessage } from '@vendora/shared'
 
 import { AdminApiError, notifyAdminApiError } from './adminApi'
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) || '/api'
 
 function getAuthToken() {
-  return localStorage.getItem('access_token') || localStorage.getItem('accessToken')
+  return localStorage.getItem('vendora.admin.access')
 }
 
 async function apiRequest<T>(path: string, options: RequestInit = {}): Promise<T> {

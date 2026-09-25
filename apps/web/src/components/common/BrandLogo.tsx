@@ -15,17 +15,18 @@ export function BrandLogo({
 }: BrandLogoProps) {
   const logoSize = compact ? 'h-9 w-9 sm:h-10 sm:w-10' : 'h-12 w-12 sm:h-14 sm:w-14'
   const wordmarkSize = compact ? 'h-6 w-[116px] sm:h-7 sm:w-[132px]' : 'h-9 w-[170px] sm:h-11 sm:w-[205px]'
+  const assetBase = import.meta.env.BASE_URL
 
   const content = (
     <div
       className={`inline-flex items-center gap-2 sm:gap-3 ${className}`}
       aria-label="Vendora"
     >
-      <img src="/Vendora_Logo_Icon.png" alt="" className={`shrink-0 object-contain ${logoSize}`} />
+      <img src={`${assetBase}Vendora_Logo_Icon.png`} alt="" className={`shrink-0 object-contain ${logoSize}`} />
 
       {/* Wordmark */}
       {showWordmark && (
-        <img src="/Vendora_Logo_Wordmark.png" alt="Vendora" className={`select-none object-contain ${wordmarkSize}`} />
+        <img src={`${assetBase}Vendora_Logo_Wordmark.png`} alt="Vendora" className={`select-none object-contain ${wordmarkSize}`} />
       )}
     </div>
   )

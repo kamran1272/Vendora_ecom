@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '@/database/prisma.service';
+import { calculateMarketplaceSettlement } from '@/config/marketplace-commission.config';
 
 @Injectable()
 export class ReportsService {
@@ -27,7 +28,18 @@ export class ReportsService {
     };
 
     if (dateFilter) where.createdAt = dateFilter;
-    if (sellerId) where.items = { some: { sellerId } };
+    const itemFilter: any = {};
+    if (sellerId) itemFilter.sellerId = sellerId;
+    if (categoryId) {
+      const category = await this.prisma.category.findUnique({ where: { id: categoryId }, select: { name: true, slug: true } });
+      const categoryNames = category ? [category.name, category.slug] : [categoryId];
+      const categoryProducts = await this.prisma.warehouseProduct.findMany({
+        where: { category: { in: categoryNames } },
+        select: { id: true },
+      });
+      itemFilter.warehouseProductId = { in: categoryProducts.map((product) => product.id) };
+    }
+    if (sellerId || categoryId) where.items = { some: itemFilter };
 
     const orders = await this.prisma.order.findMany({
       where,
@@ -47,7 +59,7 @@ export class ReportsService {
       totalRevenue += dayRevenue;
 
       order.items.forEach((item) => {
-        if (!categoryId || item.warehouseProductId === categoryId) {
+        if (!categoryId || itemFilter.warehouseProductId?.in?.includes(item.warehouseProductId)) {
           const key = item.warehouseProductId || item.productId;
           if (!productSales[key]) {
             productSales[key] = { name: item.name, quantity: 0, revenue: 0 };
@@ -301,8 +313,15 @@ export class ReportsService {
       include: { items: true, payment: true },
     });
 
+    const refunds = await this.prisma.refundRequest.findMany({
+      where: {
+        ...(dateFilter ? { requestedAt: dateFilter } : {}),
+        status: { in: ['APPROVED', 'COMPLETED', 'PAID'] },
+      },
+    });
+
     let grossRevenue = 0;
-    let vendoraCommission = 0;
+    let refundedGmv = 0;
     let sellerEarnings = 0;
     let paymentFees = 0;
 
@@ -310,36 +329,43 @@ export class ReportsService {
       const total = Number(order.total) || 0;
       grossRevenue += total;
 
-      order.items.forEach((item) => {
-        const itemTotal = Number(item.price || 0) * item.quantity;
-        const commission = itemTotal * 0.15; // 15% commission
-        vendoraCommission += commission;
-        sellerEarnings += itemTotal - commission;
-      });
-
       if (order.payment) {
-        const fee = total * 0.025; // 2.5% payment fee
-        paymentFees += fee;
+        paymentFees += Number(order.payment.fee) || 0;
       }
     });
 
-    const netRevenue = grossRevenue - paymentFees;
+    refundedGmv = refunds.reduce((sum, refund) => sum + Number(refund.amount || 0), 0);
+    const commissionAggregate = await this.prisma.commission.aggregate({
+      where: {
+        ...(dateFilter ? { createdAt: dateFilter } : {}),
+        ...(sellerId ? { sellerId } : {}),
+      },
+      _sum: { amount: true },
+    });
+    const vendoraCommission = Number(commissionAggregate._sum.amount || 0);
+    const netSales = Math.max(0, grossRevenue - refundedGmv);
+    sellerEarnings = Math.max(0, netSales - vendoraCommission);
+    const netMarketplaceRevenue = vendoraCommission - paymentFees;
 
     return {
       summary: {
         grossRevenue,
+        refundedGmv,
+        netSales,
         vendoraCommission,
         sellerEarnings,
         paymentFees,
-        netRevenue,
+        netRevenue: netMarketplaceRevenue,
         totalOrders: orders.length,
         period: { from, to },
       },
       breakdown: [
         { label: 'Gross Revenue', value: grossRevenue },
+        { label: 'Refunded GMV', value: refundedGmv },
+        { label: 'Net Sales', value: netSales },
         { label: 'Vendora Commission', value: vendoraCommission },
         { label: 'Payment Fees', value: paymentFees },
-        { label: 'Net Revenue', value: netRevenue },
+        { label: 'Net Revenue', value: netMarketplaceRevenue },
       ],
     };
   }
@@ -452,27 +478,39 @@ export class ReportsService {
     if (dateFilter) where.createdAt = dateFilter;
     if (sellerId) where.items = { some: { sellerId } };
 
-    const orders = await this.prisma.order.findMany({
-      where,
-      include: { items: true },
+    const commissions = await this.prisma.commission.findMany({
+      where: {
+        ...(dateFilter ? { createdAt: dateFilter } : {}),
+        ...(sellerId ? { sellerId } : {}),
+      },
+      include: { seller: { include: { user: true, shop: true } }, order: { include: { items: true } } },
     });
-
-    const sellers = await this.prisma.seller.findMany({ include: { user: true, shop: true } });
-    const sellerLookup = new Map(sellers.map((seller) => [seller.id, seller]));
 
     const sellerCommissions: Record<
       string,
       { seller: string; shop: string; gmv: number; commission: number; earnings: number }
     > = {};
 
-    orders.forEach((order) => {
-      order.items.forEach((item) => {
-        const key = item.sellerId;
-        if (!key) return;
-        const seller = sellerLookup.get(key);
-        if (!seller) return;
-        const itemTotal = Number(item.price || 0) * item.quantity;
-        const commission = itemTotal * 0.15; // 15% marketplace commission
+    const refunds = await this.prisma.refundRequest.findMany({
+      where: {
+        ...(dateFilter ? { requestedAt: dateFilter } : {}),
+        status: { in: ['APPROVED', 'COMPLETED', 'PAID'] },
+      },
+      include: { order: { include: { items: true } } },
+    });
+
+    const refundedBySeller = new Map<string, number>();
+    refunds.forEach((refund) => {
+      const sellerId = refund.sellerId || refund.order?.items?.[0]?.sellerId;
+      if (!sellerId) return;
+      refundedBySeller.set(sellerId, (refundedBySeller.get(sellerId) || 0) + Number(refund.amount || 0));
+    });
+
+    commissions.forEach((record) => {
+        const key = record.sellerId;
+        const seller = record.seller;
+        const itemTotal = record.order?.items.filter((item) => item.sellerId === key).reduce((sum, item) => sum + Number(item.price || 0) * item.quantity, 0) || 0;
+        const commission = Number(record.amount || 0);
 
         if (!sellerCommissions[key]) {
           sellerCommissions[key] = {
@@ -487,7 +525,13 @@ export class ReportsService {
         sellerCommissions[key].gmv += itemTotal;
         sellerCommissions[key].commission += commission;
         sellerCommissions[key].earnings += itemTotal - commission;
-      });
+    });
+
+    Object.entries(refundedBySeller).forEach(([key, refundedAmount]) => {
+      if (!sellerCommissions[key]) return;
+      sellerCommissions[key].gmv = Math.max(0, sellerCommissions[key].gmv - refundedAmount);
+      sellerCommissions[key].commission = sellerCommissions[key].commission;
+      sellerCommissions[key].earnings = sellerCommissions[key].gmv - sellerCommissions[key].commission;
     });
 
     const totalGMV = Object.values(sellerCommissions).reduce((sum, s) => sum + s.gmv, 0);

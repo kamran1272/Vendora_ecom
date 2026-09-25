@@ -6,6 +6,7 @@ import { useCartStore } from '@/store/cart'
 import { useAuth } from '@/store/auth'
 import { useToastStore } from '@/store/toast'
 import { formatCurrency } from '@/utils/format'
+import { createPaymentSession, fetchPaymentMethods, type PaymentMethodOption } from '@/services/payments'
 
 const steps = ['Cart', 'Shipping address', 'Payment', 'Review']
 
@@ -26,7 +27,8 @@ export function CheckoutPage() {
   const refreshQuote = useCartStore((state) => state.refreshQuote)
   const checkout = useCartStore((state) => state.checkout)
   const [step, setStep] = useState(0)
-  const [paymentMethod, setPaymentMethod] = useState('stripe')
+  const [paymentMethod, setPaymentMethod] = useState('')
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethodOption[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [orderId, setOrderId] = useState<string | null>(null)
@@ -44,6 +46,15 @@ export function CheckoutPage() {
       .catch((requestError) => setError(requestError instanceof Error ? requestError.message : 'Unable to calculate the current order total.'))
       .finally(() => setLoading(false))
   }, [items.length, refreshQuote, user?.id])
+
+  useEffect(() => {
+    if (!user?.id) return
+    fetchPaymentMethods().then((methods) => {
+      const configuredMethods = methods.filter((method) => method.configured)
+      setPaymentMethods(configuredMethods)
+      setPaymentMethod((current) => current || configuredMethods[0]?.id || '')
+    }).catch(() => setPaymentMethods([]))
+  }, [user?.id])
 
   useEffect(() => {
     setAddress((current) => ({ ...current, fullName: current.fullName || user?.name || '' }))
@@ -86,9 +97,15 @@ export function CheckoutPage() {
       const result = await checkout(String(user.id), {
         paymentMethod,
         shippingAddress: address,
+        idempotencyKey: crypto.randomUUID(),
       })
-      setOrderId(result.order.id)
-      showToast({ tone: 'success', title: 'Order placed successfully', message: 'Your order has been confirmed.' })
+      const payment = await createPaymentSession(result.order.id, paymentMethod)
+      if (paymentMethod === 'cod') {
+        setOrderId(result.order.id)
+        return
+      }
+      if (!payment.redirectUrl) throw new Error('The payment provider did not return a secure checkout URL.')
+      window.location.assign(payment.redirectUrl)
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Unable to complete checkout. Please try again.')
       showToast({ tone: 'error', title: 'Checkout failed', message: 'We could not place your order. Please try again.' })
@@ -122,8 +139,8 @@ export function CheckoutPage() {
         <Card className="p-6">
           {step === 0 && <div><h2 className="text-xl font-black text-slate-900">Review cart</h2><div className="mt-5 space-y-4">{items.map((item) => <div key={`${item.id}-${item.variant || ''}`} className="flex items-center justify-between border-b border-slate-200 pb-3"><div><p className="font-semibold text-slate-900">{item.name}</p><p className="text-sm text-slate-500">{item.shop || 'Seller unavailable'} · Qty {item.quantity}</p></div><p className="font-bold text-slate-900">{formatCurrency(item.price * item.quantity)}</p></div>)}</div></div>}
           {step === 1 && <div><h2 className="text-xl font-black text-slate-900">Shipping address</h2><p className="mt-2 text-sm text-slate-500">Enter the address used by the order service for fulfillment.</p><div className="mt-5 grid gap-3 sm:grid-cols-2">{Object.entries(address).map(([field, value]) => <label key={field} className={field === 'street' ? 'sm:col-span-2' : ''}><span className="mb-1 block text-sm font-semibold capitalize text-slate-700">{field.replace(/([A-Z])/g, ' $1')}</span><input required value={value} placeholder={`Enter your ${field.replace(/([A-Z])/g, ' $1').toLowerCase()}`} onChange={(event) => setAddress((current) => ({ ...current, [field]: event.target.value }))} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 outline-none focus:border-brand-500" autoComplete={field === 'fullName' ? 'name' : field === 'street' ? 'street-address' : field} /></label>)}</div></div>}
-          {step === 2 && <div><h2 className="text-xl font-black text-slate-900">Payment method</h2><p className="mt-2 text-sm text-slate-500">The current checkout backend creates a pending Stripe payment record.</p><label className="mt-5 flex cursor-pointer items-start gap-3 rounded-2xl border border-brand-300 bg-brand-50 p-4"><input type="radio" name="payment" value="stripe" checked={paymentMethod === 'stripe'} onChange={(event) => setPaymentMethod(event.target.value)} className="mt-1" /><span><span className="block font-bold text-slate-900">Stripe payment</span><span className="mt-1 block text-sm text-slate-600">Payment confirmation is handled by the existing order/payment backend.</span></span></label></div>}
-          {step === 3 && <div><h2 className="text-xl font-black text-slate-900">Review and place order</h2><div className="mt-5 space-y-3 text-sm text-slate-600"><p><strong className="text-slate-900">Ship to:</strong> {address.fullName}, {address.street}, {address.city}, {address.state}, {address.zip}, {address.country}</p><p><strong className="text-slate-900">Payment:</strong> Stripe payment</p><p><strong className="text-slate-900">Delivery:</strong> Standard delivery calculated by the cart service</p></div><Button type="button" onClick={placeOrder} disabled={!items.length} loading={loading} loadingLabel="Placing order..." className="mt-6 w-full">Place order</Button></div>}
+          {step === 2 && <div><h2 className="text-xl font-black text-slate-900">Payment method</h2><p className="mt-2 text-sm text-slate-500">Choose an available payment option for this order.</p>{paymentMethods.length ? <div className="mt-5 space-y-3">{paymentMethods.map((method) => <label key={method.id} className={`flex cursor-pointer items-start gap-3 rounded-2xl border p-4 ${paymentMethod === method.id ? 'border-brand-300 bg-brand-50' : 'border-slate-200 bg-white'}`}><input type="radio" name="payment" value={method.id} checked={paymentMethod === method.id} onChange={(event) => setPaymentMethod(event.target.value)} className="mt-1" /><span><span className="block font-bold text-slate-900">{method.label}</span><span className="mt-1 block text-sm text-slate-600">{method.id === 'cod' ? 'Pay when your order is delivered.' : `Secure payment through ${method.provider}.`}</span></span></label>)}</div> : <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">No payment option is available. Please contact support before placing an order.</div>}</div>}
+          {step === 3 && <div><h2 className="text-xl font-black text-slate-900">Review and place order</h2><div className="mt-5 space-y-3 text-sm text-slate-600"><p><strong className="text-slate-900">Ship to:</strong> {address.fullName}, {address.street}, {address.city}, {address.state}, {address.zip}, {address.country}</p><p><strong className="text-slate-900">Payment:</strong> {paymentMethods.find((method) => method.id === paymentMethod)?.label || 'Not configured'}</p><p><strong className="text-slate-900">Delivery:</strong> Standard delivery calculated by the cart service</p></div><Button type="button" onClick={placeOrder} disabled={!items.length || !paymentMethod} loading={loading} loadingLabel={paymentMethod === 'cod' ? 'Placing order...' : 'Opening secure payment...'} className="mt-6 w-full">{paymentMethod === 'cod' ? 'Place order' : 'Continue to secure payment'}</Button></div>}
         </Card>
 
         <Card className="h-fit p-6 lg:sticky lg:top-24"><h2 className="text-xl font-black text-slate-900">Order total</h2><div className="mt-5 space-y-3 text-slate-700"><div className="flex justify-between"><span>Subtotal</span><span>{formatCurrency(subtotal)}</span></div><div className="flex justify-between"><span>Shipping</span><span>{formatCurrency(shipping)}</span></div><div className="flex justify-between"><span>Tax</span><span>{formatCurrency(tax)}</span></div>{discount > 0 && <div className="flex justify-between text-emerald-600"><span>Discount</span><span>-{formatCurrency(discount)}</span></div>}<div className="flex justify-between border-t border-slate-200 pt-3 text-xl font-black text-slate-900"><span>Total</span><span>{formatCurrency(total)}</span></div></div><div className="mt-6 flex gap-3">{step > 0 && <button type="button" onClick={() => setStep((current) => current - 1)} disabled={loading} className="flex-1 rounded-xl border border-slate-200 px-4 py-3 font-semibold text-slate-700">Back</button>}{step < steps.length - 1 && <button type="button" onClick={nextStep} disabled={loading || !items.length} className="flex-1 rounded-xl bg-brand-600 px-4 py-3 font-semibold text-white disabled:opacity-50">Continue</button>}</div></Card>

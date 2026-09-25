@@ -95,15 +95,20 @@ export class ChatService {
     if (!message?.attachmentUrl) throw new NotFoundException('Attachment not found.');
     const conversation = await this.validateConversationAccess(message.conversationId, user);
     if (!conversation.sellerId) throw new NotFoundException('Attachment not found.');
-    let storedName = '';
-    try {
-      storedName = basename(decodeURIComponent(new URL(message.attachmentUrl).pathname));
-    } catch {
-      throw new NotFoundException('Attachment not found.');
-    }
-    const file = await this.prisma.uploadedFile.findFirst({ where: { sellerId: conversation.sellerId, storedName }, select: { storedName: true, mimeType: true } });
+
+    const file = await this.prisma.uploadedFile.findFirst({
+      where: {
+        sellerId: conversation.sellerId,
+        OR: [{ url: message.attachmentUrl }, { storedName: message.attachmentUrl.split('/').pop() ?? '' }, { storedName: { endsWith: `/${message.attachmentUrl.split('/').pop() ?? ''}` } }],
+      },
+      select: { storedName: true, mimeType: true, url: true },
+    });
+
     if (!file) throw new NotFoundException('Attachment not found.');
-    return { path: resolve(__dirname, '../uploads', file.storedName), mimeType: file.mimeType };
+    if (/^https?:\/\//i.test(file.url)) {
+      return { url: file.url, mimeType: file.mimeType, path: undefined };
+    }
+    return { path: resolve(__dirname, '../uploads', file.storedName), mimeType: file.mimeType, url: undefined };
   }
 
   private async validateConversationAccess(

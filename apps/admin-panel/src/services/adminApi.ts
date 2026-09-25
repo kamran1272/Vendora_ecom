@@ -12,31 +12,25 @@ import {
 import { showAdminToast } from '../components/feedback/AdminToast'
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) || '/api'
-const ADMIN_TOKEN_STORAGE_KEYS = ['access_token', 'accessToken'] as const
-const ADMIN_REFRESH_TOKEN_STORAGE_KEYS = ['refresh_token', 'refreshToken'] as const
-
+const ADMIN_TOKEN_STORAGE_KEY = 'vendora.admin.access'
+const ADMIN_REFRESH_TOKEN_STORAGE_KEY = 'vendora.admin.refresh'
+const ADMIN_USER_STORAGE_KEY = 'vendora.admin.user'
 function getStoredAdminToken() {
-  return localStorage.getItem('vendora_admin_access_token') || localStorage.getItem('access_token') || localStorage.getItem('accessToken') || null
+  return localStorage.getItem(ADMIN_TOKEN_STORAGE_KEY)
 }
 
 function setStoredAdminToken(token: string) {
-  localStorage.setItem('vendora_admin_access_token', token)
-  localStorage.setItem('access_token', token)
-  localStorage.setItem('accessToken', token)
+  localStorage.setItem(ADMIN_TOKEN_STORAGE_KEY, token)
 }
 
 function setStoredAdminRefreshToken(refreshToken: string) {
-  localStorage.setItem('vendora_admin_refresh_token', refreshToken)
-  localStorage.setItem('refresh_token', refreshToken)
-  localStorage.setItem('refreshToken', refreshToken)
+  localStorage.setItem(ADMIN_REFRESH_TOKEN_STORAGE_KEY, refreshToken)
 }
 
 function clearStoredAdminSession() {
-  localStorage.removeItem('vendora_admin_access_token')
-  localStorage.removeItem('vendora_admin_refresh_token')
-  localStorage.removeItem('vendora_admin_user')
-  ADMIN_TOKEN_STORAGE_KEYS.forEach((key) => localStorage.removeItem(key))
-  ADMIN_REFRESH_TOKEN_STORAGE_KEYS.forEach((key) => localStorage.removeItem(key))
+  localStorage.removeItem(ADMIN_USER_STORAGE_KEY)
+  localStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY)
+  localStorage.removeItem(ADMIN_REFRESH_TOKEN_STORAGE_KEY)
 }
 
 export type AdminApiErrorCode = 'NETWORK' | 'UNAUTHORIZED' | 'FORBIDDEN' | 'NOT_FOUND' | 'CONFLICT' | 'VALIDATION' | 'RATE_LIMIT' | 'SERVER' | 'UNKNOWN'
@@ -100,7 +94,7 @@ function getAuthHeaders(): Record<string, string> {
 }
 
 async function refreshAdminAccessToken() {
-  const refreshToken = localStorage.getItem('vendora_admin_refresh_token') || localStorage.getItem('refresh_token') || localStorage.getItem('refreshToken')
+  const refreshToken = localStorage.getItem(ADMIN_REFRESH_TOKEN_STORAGE_KEY)
   if (!refreshToken) return null
 
   const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
@@ -110,9 +104,9 @@ async function refreshAdminAccessToken() {
   })
   if (!response.ok) return null
 
-  const data = await response.json() as { accessToken?: string; access_token?: string; refreshToken?: string; refresh_token?: string }
-  const accessToken = data.accessToken || data.access_token
-  const nextRefreshToken = data.refreshToken || data.refresh_token
+  const data = await response.json() as { accessToken?: string; refreshToken?: string }
+  const accessToken = data.accessToken
+  const nextRefreshToken = data.refreshToken
   if (!accessToken) return null
 
   setStoredAdminToken(accessToken)

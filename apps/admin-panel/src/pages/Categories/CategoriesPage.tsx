@@ -13,6 +13,8 @@ type Category = {
   seoDescription: string | null
   status: string
   sortOrder: number
+  productCount: number
+  products: Array<{ id: string; name: string; image: string | null; status: string }>
   children?: Array<{ id: string }>
 }
 
@@ -43,11 +45,13 @@ function normalizeCategories(payload: unknown): Category[] {
       parentId: value.parentId ? String(value.parentId) : null,
       name: String(value.name ?? 'Unnamed category'),
       slug: String(value.slug ?? ''),
-      image: value.image ?? null,
+      image: value.image ?? `https://placehold.co/160x120/fff7ed/102451?text=${encodeURIComponent(String(value.name ?? 'Category').slice(0, 12))}`,
       seoTitle: value.seoTitle ?? null,
       seoDescription: value.seoDescription ?? null,
       status: String(value.status ?? 'ACTIVE').toUpperCase(),
       sortOrder: Number(value.sortOrder ?? 0),
+      productCount: Number(value.productCount ?? 0),
+      products: Array.isArray(value.products) ? value.products.map((product) => ({ id: String(product.id ?? ''), name: String(product.name ?? 'Product'), image: product.image ?? null, status: String(product.status ?? 'PUBLISHED') })) : [],
       children: value.children ?? [],
     }
   })
@@ -159,8 +163,8 @@ export function CategoriesPage() {
     <div key={category.id}>
       <div className="grid gap-3 border-t border-slate-200 px-4 py-4 md:grid-cols-[minmax(240px,1.5fr)_minmax(130px,1fr)_110px_80px_minmax(250px,1fr)] md:items-center" style={{ paddingLeft: `${16 + depth * 28}px` }}>
         <div className="flex items-center gap-3">
-          <div className="h-10 w-10 shrink-0 overflow-hidden rounded-xl bg-slate-100">{category.image ? <img src={category.image} alt="" className="h-full w-full object-cover" /> : null}</div>
-          <div><div className="font-semibold text-slate-900">{category.name}</div><div className="text-xs text-slate-500">{depth ? 'Child category' : 'Parent category'}</div></div>
+          <div className="h-10 w-10 shrink-0 overflow-hidden rounded-xl bg-slate-100">{category.image ? <img src={category.image} alt="" onError={(event) => { event.currentTarget.src = `https://placehold.co/160x120/fff7ed/102451?text=${encodeURIComponent(category.name.slice(0, 12))}` }} className="h-full w-full object-cover" /> : null}</div>
+          <div><div className="font-semibold text-slate-900">{category.name}</div><div className="text-xs text-slate-500">{depth ? 'Child category' : 'Parent category'} · {category.productCount.toLocaleString()} products</div></div>
         </div>
         <div className="text-sm text-slate-500">/{category.slug}</div>
         <span className={`w-fit rounded-full px-2.5 py-1 text-xs font-medium ${category.status === 'ACTIVE' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>{category.status}</span>
@@ -181,7 +185,30 @@ export function CategoriesPage() {
   return (
     <AdminLayout>
       <div className="space-y-6 p-1 sm:p-2 lg:p-3">
-        <header className="rounded-[26px] border border-slate-200/80 bg-white p-6 shadow-[0_16px_40px_rgba(15,23,42,0.05)]"><div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between"><div><p className="text-xs font-bold uppercase tracking-[0.2em] text-indigo-600">Catalog structure</p><h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">Categories</h1><p className="mt-2 text-sm text-slate-600">Build the storefront taxonomy, control visibility, and keep category SEO metadata organized.</p></div><button type="button" onClick={() => openCreate()} className="rounded-xl bg-indigo-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-800">Create category</button></div></header>
+        <header className="admin-page-header overflow-hidden">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+            <div className="space-y-3">
+              <div className="inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.25em] text-indigo-700">
+                Catalog structure
+              </div>
+              <div>
+                <h1 className="text-3xl font-semibold tracking-tight text-slate-950 md:text-4xl">
+                  Categories
+                </h1>
+                <p className="mt-2 max-w-2xl text-sm text-slate-600">
+                  Build the storefront taxonomy, control visibility, and keep category SEO metadata organized.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => openCreate()}
+              className="rounded-xl bg-[#102451] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#1b2d5d]"
+            >
+              Create category
+            </button>
+          </div>
+        </header>
         {error ? <div className="rounded-[20px] border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">{error}</div> : null}
         {notice ? <div className="rounded-[20px] border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">{notice}</div> : null}
         <section className="grid gap-4 md:grid-cols-3">{[['Total categories', categories.length], ['Parent categories', roots.length], ['Active categories', categories.filter((category) => category.status === 'ACTIVE').length]].map(([title, value]) => <div key={String(title)} className="rounded-[22px] border border-slate-200/80 bg-white p-5 shadow-sm"><p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">{title}</p><p className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">{value}</p></div>)}</section>

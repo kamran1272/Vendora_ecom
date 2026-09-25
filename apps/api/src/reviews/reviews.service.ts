@@ -17,12 +17,56 @@ export class ReviewsService {
     const rating = Number(reviewData?.rating ?? 0);
     const text = String(reviewData?.text ?? reviewData?.comment ?? '').trim();
     if (rating < 1 || rating > 5 || !text) throw new BadRequestException('Rating and review text are required.');
-    const warehouseProductId = reviewData?.warehouseProductId || reviewData?.productId;
-    const sellerProduct = warehouseProductId ? await this.prisma.sellerProduct.findFirst({ where: { warehouseProductId: String(warehouseProductId), status: 'ACTIVE' }, select: { sellerId: true } }) : null;
+
+    const requestedProductId = reviewData?.warehouseProductId || reviewData?.productId;
+    const sellerProduct = requestedProductId
+      ? await this.prisma.sellerProduct.findFirst({
+          where: { OR: [{ id: String(requestedProductId) }, { warehouseProductId: String(requestedProductId) }] },
+          select: { id: true, sellerId: true, warehouseProductId: true },
+        })
+      : null;
+
     if (!sellerProduct) throw new BadRequestException('A valid seller product is required.');
-    const productId = reviewData.productId ? String(reviewData.productId) : null;
-    const existing = await this.prisma.review.findFirst({ where: { customerId: String(customerId), warehouseProductId: String(warehouseProductId) } });
-    const data = { productId, warehouseProductId: String(warehouseProductId), sellerId: sellerProduct.sellerId, rating, title: reviewData.title ? String(reviewData.title) : null, text, images: JSON.stringify(Array.isArray(reviewData.images) ? reviewData.images : []), status: 'PENDING' };
+
+    const productId = String(sellerProduct.id);
+    const warehouseProductId = sellerProduct.warehouseProductId ? String(sellerProduct.warehouseProductId) : null;
+
+    const purchasedOrder = await this.prisma.order.findFirst({
+      where: {
+        userId: String(customerId),
+        status: 'DELIVERED',
+        items: {
+          some: {
+            OR: [
+              { productId },
+              ...(warehouseProductId ? [{ warehouseProductId }] : []),
+            ],
+          },
+        },
+      },
+      select: { id: true },
+    });
+
+    if (!purchasedOrder) throw new BadRequestException('You can review this product after it has been delivered to you.');
+
+    const existing = await this.prisma.review.findFirst({
+      where: {
+        customerId: String(customerId),
+        OR: [{ productId }, ...(warehouseProductId ? [{ warehouseProductId }] : [])],
+      },
+    });
+
+    const data = {
+      productId,
+      warehouseProductId,
+      sellerId: sellerProduct.sellerId,
+      rating,
+      title: reviewData.title ? String(reviewData.title) : null,
+      text,
+      images: JSON.stringify(Array.isArray(reviewData.images) ? reviewData.images : []),
+      status: 'PENDING',
+    };
+
     if (existing) return this.prisma.review.update({ where: { id: existing.id }, data });
     return this.prisma.review.create({ data: { customerId: String(customerId), ...data } });
   }

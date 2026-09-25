@@ -18,7 +18,7 @@ export function getAdminNotificationDestination(notification: AdminNotification)
 import { AdminApiError, notifyAdminApiError } from './adminApi'
 
 const baseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined) || '/api'
-const token = () => localStorage.getItem('access_token') || localStorage.getItem('accessToken')
+const token = () => localStorage.getItem('vendora.admin.access')
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   let response: Response

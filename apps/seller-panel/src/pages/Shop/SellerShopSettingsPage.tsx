@@ -34,6 +34,13 @@ const emptySettings: ShopSettings = {
 const inputClass = 'w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-[#2d80d8] focus:ring-2 focus:ring-blue-100'
 
 function slugify(value: string) { return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') }
+function normalizeSettings(data: Partial<ShopSettings> | null | undefined): ShopSettings {
+  return Object.keys(emptySettings).reduce((next, key) => {
+    const value = data?.[key as keyof ShopSettings]
+    next[key as keyof ShopSettings] = typeof value === 'string' ? value : ''
+    return next
+  }, { ...emptySettings })
+}
 function Field({ label, children }: { label: string; children: React.ReactNode }) { return <label className="block text-sm font-medium text-slate-700"><span className="mb-1.5 block">{label}</span>{children}</label> }
 function Section({ title, icon, children }: { title: string; icon: React.ReactNode; children: React.ReactNode }) { return <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-center gap-3 border-b border-slate-100 pb-4"><span className="flex h-9 w-9 items-center justify-center rounded-xl bg-sky-50 text-sky-700">{icon}</span><h2 className="text-lg font-bold text-slate-900">{title}</h2></div><div className="mt-5">{children}</div></section> }
 
@@ -46,10 +53,10 @@ export function SellerShopSettingsPage() {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
 
-  const load = async () => { setLoading(true); setError(''); try { const data = await getSellerShop<ShopSettings>(); const next = { ...emptySettings, ...data }; setForm(next); setSavedForm(next) } catch (loadError: any) { setError(loadError?.response?.data?.message || loadError?.message || 'Unable to load shop settings.') } finally { setLoading(false) } }
+  const load = async () => { setLoading(true); setError(''); try { const data = await getSellerShop<ShopSettings>(); const next = normalizeSettings(data); setForm(next); setSavedForm(next) } catch (loadError: any) { setError(loadError?.response?.data?.message || loadError?.message || 'Unable to load shop settings.') } finally { setLoading(false) } }
   useEffect(() => { void load() }, [])
   const update = (key: keyof ShopSettings, value: string) => { setForm((current) => ({ ...current, [key]: value })); setError(''); setNotice('') }
-  const submit = async (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); if (!form.name.trim() || !form.slug.trim()) { setError('Shop name and slug are required.'); return } if (form.contactEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.contactEmail)) { setError('Enter a valid contact email.'); return }; setSaving(true); setError(''); setNotice(''); try { const data = await updateSellerShop<ShopSettings>(form); const next = { ...emptySettings, ...data }; setForm(next); setSavedForm(next); setNotice('Shop settings saved successfully.') } catch (saveError: any) { setError(saveError?.response?.data?.message || saveError?.message || 'Unable to save shop settings.') } finally { setSaving(false) } }
+  const submit = async (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); if (!form.name.trim() || !form.slug.trim()) { setError('Shop name and slug are required.'); return } if (form.contactEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.contactEmail)) { setError('Enter a valid contact email.'); return }; setSaving(true); setError(''); setNotice(''); try { const data = await updateSellerShop<ShopSettings>(form); const next = normalizeSettings(data); setForm(next); setSavedForm(next); setNotice('Shop settings saved successfully.') } catch (saveError: any) { setError(saveError?.response?.data?.message || saveError?.message || 'Unable to save shop settings.') } finally { setSaving(false) } }
 
   return <SellerLayout title="Shop settings" subtitle="Manage your storefront identity, policies, contact details, and SEO." actions={<button type="button" onClick={() => void load()} disabled={loading} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700"><RefreshCw size={15} className={loading ? 'animate-spin' : ''} /> Refresh</button>}>
     {loading ? <div className="space-y-5"><div className="h-64 animate-pulse rounded-2xl bg-slate-200" /><div className="h-64 animate-pulse rounded-2xl bg-slate-200" /></div> : <form onSubmit={submit} className="space-y-5">

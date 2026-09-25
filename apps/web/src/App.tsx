@@ -1,16 +1,18 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
-import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { io } from 'socket.io-client'
+import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { CustomerHeader } from '@/components/layout/CustomerHeader'
 import { CustomerFooter } from '@/components/layout/CustomerFooter'
-import { SELLER_REGISTRATION_URL } from '@/config/customer'
+import { BrandLogo } from '@/components/common/BrandLogo'
+import { ADMIN_PANEL_URL, SELLER_PANEL_URL, SELLER_REGISTRATION_URL } from '@/config/customer'
 import { Button } from '@/components/ui/DesignSystem'
 import { StatCard } from '@/components/ui/StatCard'
 import { ErrorState, LoadingState } from '@/components/ui/FeedbackState'
 import { ToastHost } from '@/components/ui/ToastHost'
 import { apiRequest, getAuthToken } from '@/services/api'
 import { formatCurrency } from '@/utils/format'
+import { resolveProductImageUrl } from '@/utils/productImage'
 import { fetchCatalogCategories, fetchCatalogBrands, fetchCatalogShops, fetchCatalogShop, type CatalogCategory, type CatalogBrand, type CatalogShop } from '@/services/catalog'
-import type { MarketplaceProduct } from '@/services/marketplace'
 import { useAuth } from '@/store/auth'
 import { useCartStore } from '@/store/cart'
 import {
@@ -38,6 +40,11 @@ const CustomerProfilePage = lazy(() => import('@/pages/ProfilePage').then(({ Pro
 const CustomerPaymentMethodsPage = lazy(() => import('@/pages/PaymentMethodsPage').then(({ PaymentMethodsPage: page }) => ({ default: page })))
 const CustomerReviewsPage = lazy(() => import('@/pages/ReviewsPage').then(({ ReviewsPage: page }) => ({ default: page })))
 const CustomerNotificationsPage = lazy(() => import('@/pages/NotificationsPage').then(({ NotificationsPage: page }) => ({ default: page })))
+const CustomerComparePage = lazy(() => import('@/pages/ComparePage').then(({ ComparePage: page }) => ({ default: page })))
+const CustomerQuestionsPage = lazy(() => import('@/pages/QuestionsPage').then(({ QuestionsPage: page }) => ({ default: page })))
+const CustomerCouponsPage = lazy(() => import('@/pages/CouponsPage').then(({ CouponsPage: page }) => ({ default: page })))
+const CustomerAffiliatePage = lazy(() => import('@/pages/AffiliatePage').then(({ AffiliatePage: page }) => ({ default: page })))
+const CustomerSettingsPage = lazy(() => import('@/pages/SettingsPage').then(({ SettingsPage: page }) => ({ default: page })))
 const TermsPage = lazy(() => import('@/pages/TermsPage').then(({ TermsPage: page }) => ({ default: page })))
 
 type HeaderNavItem = {
@@ -52,9 +59,9 @@ const apiNavigationItems: HeaderNavItem[] = [
   { id: 'categories', label: 'Categories', href: '/categories', enabled: true },
   { id: 'brands', label: 'Brands', href: '/brands', enabled: true },
   { id: 'products', label: 'Products', href: '/shop', enabled: true },
-  { id: 'seller', label: 'Seller', href: '/seller', enabled: true },
+  { id: 'seller', label: 'Seller', href: SELLER_PANEL_URL + '/seller', enabled: true },
   { id: 'register-shop', label: 'Register Your Shop', href: '/shops/create', enabled: true },
-  { id: 'admin', label: 'Admin', href: '/admin', enabled: true }
+  { id: 'admin', label: 'Admin', href: ADMIN_PANEL_URL + '/admin', enabled: true }
 ]
 
 const headerActions = [
@@ -75,28 +82,79 @@ const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) |
 
 function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode; allowedRoles?: string[] }) {
   const token = useAuth((state) => state.token)
-  const role = useAuth((state) => state.user?.role)
+  const user = useAuth((state) => state.user)
+  const authChecked = useAuth((state) => state.authChecked)
   const location = useLocation()
+
+  if (token && !authChecked) {
+    return <LoadingState />
+  }
 
   if (!token) {
     return <Navigate to="/login" replace state={{ from: { pathname: location.pathname, search: location.search } }} />
   }
 
-  if (allowedRoles && (!role || !allowedRoles.includes(role))) {
+  if (allowedRoles && (!user?.role || !allowedRoles.includes(user.role))) {
     return <Navigate to="/" replace />
   }
 
   return <>{children}</>
 }
 
+function ExternalPanelRedirect({ baseUrl }: { baseUrl: string }) {
+  const location = useLocation()
+  const target = `${baseUrl}${location.pathname}${location.search}${location.hash}`
+
+  useEffect(() => {
+    window.location.assign(target)
+  }, [target])
+
+  return <LoadingState />
+}
+
 function App() {
+  const location = useLocation()
+  const token = useAuth((state) => state.token)
+  const setAuthoritativeUser = useAuth((state) => state.setAuthoritativeUser)
+  const setAuthChecked = useAuth((state) => state.setAuthChecked)
+  const isAuthRoute = ['/login', '/register', '/forgot-password'].some((path) => location.pathname === path || location.pathname.startsWith(`${path}/`))
+
+  useEffect(() => {
+    let cancelled = false
+
+    if (!token) {
+      setAuthChecked(true)
+      return () => {
+        cancelled = true
+      }
+    }
+
+    setAuthChecked(false)
+    apiRequest<Record<string, unknown>>('/auth/me')
+      .then((user) => {
+        if (!cancelled) {
+          setAuthoritativeUser(user)
+          setAuthChecked(true)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          useAuth.getState().logout()
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [setAuthChecked, setAuthoritativeUser, token])
+
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
-      <CustomerHeader />
+    <div className="marketplace-shell min-h-screen bg-slate-50 text-slate-900">
+      {!isAuthRoute && <CustomerHeader />}
       <ToastHost />
 
-      <main className="mx-auto w-full max-w-[1440px] px-4 py-6 pb-24 sm:px-6 sm:py-10 md:px-8 md:pb-10">
-        <FloatingSupportButton />
+      <main className={isAuthRoute ? 'min-h-screen' : 'mx-auto w-full max-w-[1440px] px-4 py-6 pb-24 sm:px-6 sm:py-10 md:px-8 md:pb-10'}>
+        {!isAuthRoute && <FloatingSupportButton />}
         <Suspense fallback={<LoadingState />}>
         <Routes>
           <Route path="/" element={<CustomerHomePage />} />
@@ -142,80 +200,19 @@ function App() {
           <Route path="/account/addresses" element={<ProtectedRoute><CustomerAddressesPage /></ProtectedRoute>} />
           <Route path="/account/payment-methods" element={<ProtectedRoute><CustomerPaymentMethodsPage /></ProtectedRoute>} />
           <Route path="/account/wishlist" element={<ProtectedRoute><CustomerWishlistPage /></ProtectedRoute>} />
-          <Route path="/account/compare" element={<ProtectedRoute><AccountComparePage /></ProtectedRoute>} />
+          <Route path="/account/compare" element={<ProtectedRoute><CustomerComparePage /></ProtectedRoute>} />
           <Route path="/account/reviews" element={<ProtectedRoute><CustomerReviewsPage /></ProtectedRoute>} />
-          <Route path="/account/questions" element={<ProtectedRoute><AccountQuestionsPage /></ProtectedRoute>} />
+          <Route path="/account/questions" element={<ProtectedRoute><CustomerQuestionsPage /></ProtectedRoute>} />
           <Route path="/account/notifications" element={<ProtectedRoute><CustomerNotificationsPage /></ProtectedRoute>} />
-          <Route path="/account/coupons" element={<ProtectedRoute><AccountCouponsPage /></ProtectedRoute>} />
-          <Route path="/account/affiliate" element={<ProtectedRoute><AccountAffiliatePage /></ProtectedRoute>} />
-          <Route path="/account/settings" element={<ProtectedRoute><AccountSettingsPage /></ProtectedRoute>} />
+          <Route path="/account/coupons" element={<ProtectedRoute><CustomerCouponsPage /></ProtectedRoute>} />
+          <Route path="/account/affiliate" element={<ProtectedRoute><CustomerAffiliatePage /></ProtectedRoute>} />
+          <Route path="/account/settings" element={<ProtectedRoute><CustomerSettingsPage /></ProtectedRoute>} />
           <Route path="/shops/create" element={<SellerRegistrationRedirect />} />
-          <Route path="/seller/shops/:shopId" element={<ProtectedRoute><SellerShopOverviewPage /></ProtectedRoute>} />
-          <Route path="/seller/shops/:shopId/settings" element={<ProtectedRoute allowedRoles={['SELLER', 'ADMIN', 'SUPER_ADMIN']}><SellerShopSettingsPage /></ProtectedRoute>} />
-          <Route path="/seller" element={<ProtectedRoute allowedRoles={['SELLER', 'ADMIN', 'SUPER_ADMIN']}><SellerDashboardPage /></ProtectedRoute>} />
-          <Route path="/seller/dashboard" element={<ProtectedRoute allowedRoles={['SELLER', 'ADMIN', 'SUPER_ADMIN']}><SellerDashboardPage /></ProtectedRoute>} />
-          <Route path="/seller/products" element={<ProtectedRoute allowedRoles={['SELLER', 'ADMIN', 'SUPER_ADMIN']}><SellerProductsPage /></ProtectedRoute>} />
-          <Route path="/seller/products/create" element={<ProtectedRoute allowedRoles={['SELLER', 'ADMIN', 'SUPER_ADMIN']}><SellerProductCreatePage /></ProtectedRoute>} />
-          <Route path="/seller/products/:id/edit" element={<ProtectedRoute allowedRoles={['SELLER', 'ADMIN', 'SUPER_ADMIN']}><SellerProductEditPage /></ProtectedRoute>} />
-          <Route path="/seller/products/:id/inventory" element={<ProtectedRoute allowedRoles={['SELLER', 'ADMIN', 'SUPER_ADMIN']}><SellerProductInventoryPage /></ProtectedRoute>} />
-          <Route path="/seller/orders" element={<ProtectedRoute allowedRoles={['SELLER', 'ADMIN', 'SUPER_ADMIN']}><SellerOrdersPage /></ProtectedRoute>} />
-          <Route path="/seller/orders/:id" element={<ProtectedRoute allowedRoles={['SELLER', 'ADMIN', 'SUPER_ADMIN']}><SellerOrderDetailPage /></ProtectedRoute>} />
-          <Route path="/seller/customers" element={<ProtectedRoute allowedRoles={['SELLER', 'ADMIN', 'SUPER_ADMIN']}><SellerCustomersPage /></ProtectedRoute>} />
-          <Route path="/seller/reviews" element={<ProtectedRoute allowedRoles={['SELLER', 'ADMIN', 'SUPER_ADMIN']}><SellerReviewsPage /></ProtectedRoute>} />
-          <Route path="/seller/questions" element={<ProtectedRoute allowedRoles={['SELLER', 'ADMIN', 'SUPER_ADMIN']}><SellerQuestionsPage /></ProtectedRoute>} />
-          <Route path="/seller/coupons" element={<ProtectedRoute allowedRoles={['SELLER', 'ADMIN', 'SUPER_ADMIN']}><SellerCouponsPage /></ProtectedRoute>} />
-          <Route path="/seller/earnings" element={<ProtectedRoute allowedRoles={['SELLER', 'ADMIN', 'SUPER_ADMIN']}><SellerEarningsPage /></ProtectedRoute>} />
-          <Route path="/seller/transactions" element={<ProtectedRoute allowedRoles={['SELLER', 'ADMIN', 'SUPER_ADMIN']}><SellerTransactionsPage /></ProtectedRoute>} />
-          <Route path="/seller/withdrawals" element={<ProtectedRoute allowedRoles={['SELLER', 'ADMIN', 'SUPER_ADMIN']}><SellerWithdrawalsPage /></ProtectedRoute>} />
-          <Route path="/seller/analytics" element={<ProtectedRoute allowedRoles={['SELLER', 'ADMIN', 'SUPER_ADMIN']}><SellerAnalyticsPage /></ProtectedRoute>} />
-          <Route path="/seller/notifications" element={<ProtectedRoute allowedRoles={['SELLER', 'ADMIN', 'SUPER_ADMIN']}><SellerNotificationsPage /></ProtectedRoute>} />
-          <Route path="/seller/settings" element={<ProtectedRoute allowedRoles={['SELLER', 'ADMIN', 'SUPER_ADMIN']}><SellerSettingsPage /></ProtectedRoute>} />
-          <Route path="/admin/login" element={<AdminLoginPage />} />
-          <Route path="/admin" element={<ProtectedRoute allowedRoles={['ADMIN', 'SUPER_ADMIN']}><AdminDashboardPage /></ProtectedRoute>} />
-          <Route path="/admin/dashboard" element={<ProtectedRoute allowedRoles={['ADMIN', 'SUPER_ADMIN']}><AdminDashboardPage /></ProtectedRoute>} />
-          <Route path="/admin/users" element={<ProtectedRoute allowedRoles={['ADMIN', 'SUPER_ADMIN']}><AdminUsersPage /></ProtectedRoute>} />
-          <Route path="/admin/users/:id" element={<ProtectedRoute allowedRoles={['ADMIN', 'SUPER_ADMIN']}><AdminUserDetailPage /></ProtectedRoute>} />
-          <Route path="/admin/sellers" element={<ProtectedRoute allowedRoles={['ADMIN', 'SUPER_ADMIN']}><AdminSellersPage /></ProtectedRoute>} />
-          <Route path="/admin/sellers/pending" element={<ProtectedRoute allowedRoles={['ADMIN', 'SUPER_ADMIN']}><AdminSellersPendingPage /></ProtectedRoute>} />
-          <Route path="/admin/sellers/approved" element={<ProtectedRoute allowedRoles={['ADMIN', 'SUPER_ADMIN']}><AdminSellersApprovedPage /></ProtectedRoute>} />
-          <Route path="/admin/sellers/suspended" element={<ProtectedRoute allowedRoles={['ADMIN', 'SUPER_ADMIN']}><AdminSellersSuspendedPage /></ProtectedRoute>} />
-          <Route path="/admin/sellers/:id" element={<ProtectedRoute allowedRoles={['ADMIN', 'SUPER_ADMIN']}><AdminSellerDetailPage /></ProtectedRoute>} />
-          <Route path="/admin/shops" element={<ProtectedRoute allowedRoles={['ADMIN', 'SUPER_ADMIN']}><AdminShopsPage /></ProtectedRoute>} />
-          <Route path="/admin/shops/:id" element={<ProtectedRoute allowedRoles={['ADMIN', 'SUPER_ADMIN']}><AdminShopDetailPage /></ProtectedRoute>} />
-          <Route path="/admin/products" element={<ProtectedRoute allowedRoles={['ADMIN', 'SUPER_ADMIN']}><AdminProductsPage /></ProtectedRoute>} />
-          <Route path="/admin/products/pending" element={<ProtectedRoute allowedRoles={['ADMIN', 'SUPER_ADMIN']}><AdminProductsPendingPage /></ProtectedRoute>} />
-          <Route path="/admin/products/approved" element={<ProtectedRoute allowedRoles={['ADMIN', 'SUPER_ADMIN']}><AdminProductsApprovedPage /></ProtectedRoute>} />
-          <Route path="/admin/products/rejected" element={<ProtectedRoute allowedRoles={['ADMIN', 'SUPER_ADMIN']}><AdminProductsRejectedPage /></ProtectedRoute>} />
-          <Route path="/admin/categories" element={<ProtectedRoute allowedRoles={['ADMIN', 'SUPER_ADMIN']}><AdminCategoriesPage /></ProtectedRoute>} />
-          <Route path="/admin/brands" element={<ProtectedRoute allowedRoles={['ADMIN', 'SUPER_ADMIN']}><AdminBrandsPage /></ProtectedRoute>} />
-          <Route path="/admin/attributes" element={<ProtectedRoute allowedRoles={['ADMIN', 'SUPER_ADMIN']}><AdminAttributesPage /></ProtectedRoute>} />
-          <Route path="/admin/orders" element={<ProtectedRoute allowedRoles={['ADMIN', 'SUPER_ADMIN']}><AdminOrdersPage /></ProtectedRoute>} />
-          <Route path="/admin/orders/:id" element={<ProtectedRoute allowedRoles={['ADMIN', 'SUPER_ADMIN']}><AdminOrderDetailPage /></ProtectedRoute>} />
-          <Route path="/admin/payments" element={<ProtectedRoute allowedRoles={['ADMIN', 'SUPER_ADMIN']}><AdminPaymentsPage /></ProtectedRoute>} />
-          <Route path="/admin/transactions" element={<ProtectedRoute allowedRoles={['ADMIN', 'SUPER_ADMIN']}><AdminTransactionsPage /></ProtectedRoute>} />
-          <Route path="/admin/refunds" element={<ProtectedRoute allowedRoles={['ADMIN', 'SUPER_ADMIN']}><AdminRefundsPage /></ProtectedRoute>} />
-          <Route path="/admin/commissions" element={<ProtectedRoute allowedRoles={['ADMIN', 'SUPER_ADMIN']}><AdminCommissionsPage /></ProtectedRoute>} />
-          <Route path="/admin/payouts" element={<ProtectedRoute allowedRoles={['ADMIN', 'SUPER_ADMIN']}><AdminPayoutsPage /></ProtectedRoute>} />
-          <Route path="/admin/reviews" element={<ProtectedRoute allowedRoles={['ADMIN', 'SUPER_ADMIN']}><AdminReviewsPage /></ProtectedRoute>} />
-          <Route path="/admin/questions" element={<ProtectedRoute allowedRoles={['ADMIN', 'SUPER_ADMIN']}><AdminQuestionsPage /></ProtectedRoute>} />
-          <Route path="/admin/coupons" element={<ProtectedRoute allowedRoles={['ADMIN', 'SUPER_ADMIN']}><AdminCouponsPage /></ProtectedRoute>} />
-          <Route path="/admin/promotions" element={<ProtectedRoute allowedRoles={['ADMIN', 'SUPER_ADMIN']}><AdminPromotionsPage /></ProtectedRoute>} />
-          <Route path="/admin/banners" element={<ProtectedRoute allowedRoles={['ADMIN', 'SUPER_ADMIN']}><AdminBannersPage /></ProtectedRoute>} />
-          <Route path="/admin/notifications" element={<ProtectedRoute allowedRoles={['ADMIN', 'SUPER_ADMIN']}><AdminNotificationsPage /></ProtectedRoute>} />
-          <Route path="/admin/affiliate" element={<ProtectedRoute allowedRoles={['ADMIN', 'SUPER_ADMIN']}><AdminAffiliatePage /></ProtectedRoute>} />
-          <Route path="/admin/pages" element={<ProtectedRoute allowedRoles={['ADMIN', 'SUPER_ADMIN']}><AdminPagesPage /></ProtectedRoute>} />
-          <Route path="/admin/menus" element={<ProtectedRoute allowedRoles={['ADMIN', 'SUPER_ADMIN']}><AdminMenusPage /></ProtectedRoute>} />
-          <Route path="/admin/languages" element={<ProtectedRoute allowedRoles={['ADMIN', 'SUPER_ADMIN']}><AdminLanguagesPage /></ProtectedRoute>} />
-          <Route path="/admin/currencies" element={<ProtectedRoute allowedRoles={['ADMIN', 'SUPER_ADMIN']}><AdminCurrenciesPage /></ProtectedRoute>} />
-          <Route path="/admin/shipping" element={<ProtectedRoute allowedRoles={['ADMIN', 'SUPER_ADMIN']}><AdminShippingPage /></ProtectedRoute>} />
-          <Route path="/admin/taxes" element={<ProtectedRoute allowedRoles={['ADMIN', 'SUPER_ADMIN']}><AdminTaxesPage /></ProtectedRoute>} />
-          <Route path="/admin/reports" element={<ProtectedRoute allowedRoles={['ADMIN', 'SUPER_ADMIN']}><AdminReportsPage /></ProtectedRoute>} />
-          <Route path="/admin/settings" element={<ProtectedRoute allowedRoles={['ADMIN', 'SUPER_ADMIN']}><AdminSettingsPage /></ProtectedRoute>} />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
         </Suspense>
       </main>
-      <CustomerFooter />
+      {!isAuthRoute && <CustomerFooter />}
     </div>
   )
 }
@@ -340,7 +337,7 @@ const homepageConfig: HomepageSectionConfig[] = [
       'Payout and commission controls'
     ],
     cta: { label: 'Register your shop', href: '/shops/create' },
-    secondaryCta: { label: 'Seller dashboard', href: '/seller' }
+    secondaryCta: { label: 'Seller dashboard', href: `${SELLER_PANEL_URL}/seller` }
   },
   {
     id: 'footer-cta',
@@ -610,7 +607,8 @@ function BrandPage() {
   return <Navigate to={`/search?brand=${encodeURIComponent(brand.name)}`} replace />
 }
 
-const marketplaceSearchCatalog: MarketplaceProduct[] = [
+/* Legacy inline search implementation retired. The authoritative search page is apps/web/src/pages/SearchPage.tsx.
+const marketplaceSearchCatalog = [
 ]
 
 const searchSortOptions = [
@@ -861,6 +859,8 @@ function SearchPage() {
   )
 }
 
+*/
+
 function ShopsPage() {
   const [shops, setShops] = useState<CatalogShop[]>([])
   const [error, setError] = useState(false)
@@ -910,6 +910,8 @@ function AuthPage({ mode }: { mode: 'login' | 'register' }) {
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [twoFactorCode, setTwoFactorCode] = useState('')
+  const [requiresTwoFactor, setRequiresTwoFactor] = useState(false)
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
@@ -919,19 +921,19 @@ function AuthPage({ mode }: { mode: 'login' | 'register' }) {
     try {
       const endpoint = mode === 'login' ? '/auth/login' : '/auth/register'
       const payload = mode === 'login'
-        ? { email: form.email, password: form.password }
+        ? { email: form.email, password: form.password, ...(twoFactorCode ? { twoFactorCode } : {}) }
         : { name: form.name, email: form.email, password: form.password }
 
-      const data = await apiRequest<{ accessToken?: string; access_token?: string; token?: string; user?: Record<string, unknown> }>(endpoint, {
+      const data = await apiRequest<{ accessToken?: string; refreshToken?: string }>(endpoint, {
         method: 'POST',
         body: JSON.stringify(payload),
       })
 
-      const token = data.accessToken || data.access_token || data.token || null
+      const token = data.accessToken || null
       login({
-        user: data.user ?? null,
         token,
         accessToken: token,
+        refreshToken: data.refreshToken,
       })
 
       if (mode === 'register') {
@@ -942,6 +944,9 @@ function AuthPage({ mode }: { mode: 'login' | 'register' }) {
       const destination = (location.state as { from?: { pathname?: string; search?: string } } | null)?.from
       navigate(destination?.pathname ? `${destination.pathname}${destination.search || ''}` : '/')
     } catch (err) {
+      if (mode === 'login' && err instanceof Error && /two-factor.*required/i.test(err.message)) {
+        setRequiresTwoFactor(true)
+      }
       setError(err instanceof TypeError && err.message === 'Failed to fetch'
         ? 'Unable to reach Vendora services. Please make sure the web app and API are running, then try again.'
         : err instanceof Error ? err.message : 'Authentication failed')
@@ -951,9 +956,17 @@ function AuthPage({ mode }: { mode: 'login' | 'register' }) {
   }
 
   return (
-    <form className="mx-auto max-w-xl rounded-3xl bg-white p-8 shadow-sm ring-1 ring-slate-200" onSubmit={handleSubmit}>
-      <p className="text-sm font-semibold uppercase tracking-[0.2em] text-brand-600">{mode === 'login' ? 'Welcome back' : 'Create account'}</p>
-      <h2 className="mt-3 text-3xl font-bold">{mode === 'login' ? 'Login to Vendora' : 'Join Vendora'}</h2>
+    <div className="min-h-screen bg-[#f4f6fb] px-4 py-6 sm:px-8 sm:py-10">
+      <div className="mx-auto grid min-h-[calc(100vh-3rem)] max-w-6xl overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-[0_24px_80px_rgba(16,36,81,0.12)] lg:grid-cols-[1fr_0.85fr]">
+        <section className="hidden bg-[#102451] p-10 text-white lg:flex lg:flex-col lg:justify-between">
+          <div><BrandLogo href="/" className="rounded-lg bg-white px-3 py-2" /><p className="mt-14 text-xs font-bold uppercase tracking-[0.28em] text-orange-300">Trusted marketplace</p><h1 className="mt-4 max-w-md text-5xl font-black leading-[1.05] tracking-tight">Everything you need to shop and sell with confidence.</h1><p className="mt-6 max-w-md text-base leading-7 text-blue-100">Secure accounts, independent stores, and a marketplace built for everyday commerce.</p></div>
+          <div className="grid grid-cols-2 gap-3 text-sm"><div className="rounded-2xl border border-white/15 bg-white/10 p-4"><p className="font-bold text-orange-200">Protected</p><p className="mt-1 text-blue-100">Account access</p></div><div className="rounded-2xl border border-white/15 bg-white/10 p-4"><p className="font-bold text-orange-200">Connected</p><p className="mt-1 text-blue-100">Seller support</p></div></div>
+        </section>
+        <section className="flex items-center justify-center p-6 sm:p-10">
+          <form className="w-full max-w-md" onSubmit={handleSubmit}>
+      <BrandLogo href="/" compact />
+      <p className="mt-10 text-xs font-bold uppercase tracking-[0.2em] text-[#d97706]">{mode === 'login' ? 'Welcome back' : 'Create account'}</p>
+      <h2 className="mt-3 text-3xl font-black tracking-tight text-[#102451]">{mode === 'login' ? 'Login to Vendora' : 'Join Vendora'}</h2>
 
       {error && (
         <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
@@ -983,8 +996,19 @@ function AuthPage({ mode }: { mode: 'login' | 'register' }) {
           type="password"
           onChange={(value) => setForm((current) => ({ ...current, password: value }))}
         />
+        {mode === 'login' && requiresTwoFactor && (
+          <Field
+            label="Authenticator code or backup code"
+            placeholder="Enter your code"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            value={twoFactorCode}
+            onChange={setTwoFactorCode}
+            required
+          />
+        )}
       </div>
-      <Button type="submit" loading={loading} loadingLabel="Please wait..." className="mt-8">
+      <Button type="submit" loading={loading} loadingLabel="Please wait..." className="mt-8 w-full bg-[#102451] hover:bg-[#1a3268]">
         {mode === 'login' ? 'Login' : 'Create account'}
       </Button>
 
@@ -996,12 +1020,15 @@ function AuthPage({ mode }: { mode: 'login' | 'register' }) {
           <Link to="/forgot-password" className="font-medium text-slate-700 hover:text-slate-900">
             Forgot password?
           </Link>
-          <Link to="/seller" className="font-medium text-slate-700 hover:text-slate-900">
+          <a href={`${SELLER_PANEL_URL}/seller`} className="font-medium text-slate-700 hover:text-slate-900">
             Become Seller
-          </Link>
+          </a>
         </div>
       )}
-    </form>
+          </form>
+        </section>
+      </div>
+    </div>
   )
 }
 
@@ -1086,7 +1113,34 @@ function ResetPasswordPage() {
 }
 
 function VerifyEmailPage() {
-  return <PageShell title="Verify email" description="Confirm your email address and activate your account." />
+  const { token } = useParams()
+  const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading')
+  const [message, setMessage] = useState('Verifying your email address...')
+
+  useEffect(() => {
+    if (!token) {
+      setStatus('error')
+      setMessage('This email verification link is missing its token.')
+      return
+    }
+
+    apiRequest<{ message?: string }>(`/auth/verify-email/${encodeURIComponent(token)}`)
+      .then((response) => {
+        setStatus('success')
+        setMessage(response.message || 'Your email has been verified. You can now sign in.')
+      })
+      .catch((requestError) => {
+        setStatus('error')
+        setMessage(requestError instanceof Error ? requestError.message : 'This email verification link is invalid or expired.')
+      })
+  }, [token])
+
+  return (
+    <PageShell
+      title={status === 'success' ? 'Email verified' : status === 'error' ? 'Verification failed' : 'Verify email'}
+      description={message}
+    />
+  )
 }
 
 function AccountPage() {
@@ -1208,15 +1262,6 @@ function AccountOrderDetailPage() {
     </div>
   )
 }
-function AccountAddressesPage() { return <PageShell title="Addresses" description="Manage saved delivery addresses and your default shipping preferences." /> }
-function AccountComparePage() { return <PageShell title="Compare" description="Compare products side-by-side before making a purchase decision." /> }
-function AccountReviewsPage() { return <PageShell title="Reviews" description="See your submitted reviews and feedback for past purchases." /> }
-function AccountQuestionsPage() { return <PageShell title="Questions" description="Review product questions and follow-ups you have created or answered." /> }
-function AccountNotificationsPage() { return <PageShell title="Notifications" description="Check platform updates, order alerts, and seller promotions." /> }
-function AccountCouponsPage() { return <PageShell title="Coupons" description="View available offers, promo codes, and discount history." /> }
-function AccountAffiliatePage() { return <PageShell title="Affiliate" description="Track referrals, click performance, and affiliate earnings." /> }
-function AccountSettingsPage() { return <PageShell title="Settings" description="Update password, account preferences, notifications, and privacy controls." /> }
-
 function AboutUsPage() {
   return (
     <div className="space-y-6">
@@ -1504,7 +1549,7 @@ function CartPage() {
                 <div key={item.id} className="rounded-2xl bg-slate-50 p-5">
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex min-w-0 items-start gap-3">
-                      {item.imageUrl ? <img src={item.imageUrl} alt="" className="h-16 w-16 shrink-0 rounded-xl object-cover" /> : <div className="h-16 w-16 shrink-0 rounded-xl bg-slate-200" aria-hidden="true" />}
+                      {item.imageUrl ? <img src={resolveProductImageUrl(item.imageUrl)} alt="" className="h-16 w-16 shrink-0 rounded-xl object-cover" /> : <div className="h-16 w-16 shrink-0 rounded-xl bg-slate-200" aria-hidden="true" />}
                       <div>
                       <p className="text-lg font-bold text-slate-900">{item.name}</p>
                       <p className="mt-1 text-sm text-slate-500">{item.shop || 'Seller information unavailable'}</p>
@@ -1682,6 +1727,7 @@ function SellerRegistrationRedirect() {
   )
 }
 
+/* Legacy seller and admin page implementations removed from the customer app.
 function SellerSetupPage() {
   const [form, setForm] = useState({
     name: '',
@@ -2500,6 +2546,8 @@ function AdminTaxesPage() { return <PageShell title="Taxes" description="Configu
 function AdminReportsPage() { return <PageShell title="Reports" description="Review platform insights, operational trends, and business health metrics." /> }
 function AdminSettingsPage() { return <PageShell title="Settings" description="Control platform policy, security, marketplace defaults, and system configuration." /> }
 
+*/
+
 function NotFoundPage() {
   return (
     <div className="rounded-3xl bg-white p-10 text-center shadow-sm ring-1 ring-slate-200">
@@ -2580,7 +2628,38 @@ function CustomerChatPage() {
       .finally(() => {
         markConversationRead(selectedId).catch(() => undefined)
       })
+
+    const reconcileTimer = window.setInterval(() => {
+      void fetchChatConversations().then((items) => {
+        setConversations((current) => current.length ? items : current)
+        const next = items.find((conversation) => conversation.id === selectedId)
+        if (next) {
+          setConversations(items)
+        }
+      }).catch(() => undefined)
+    }, 60_000)
+
+    return () => window.clearInterval(reconcileTimer)
   }, [selectedId])
+
+  useEffect(() => {
+    if (!selectedId || !isAuthenticated || !getAuthToken()) return
+
+    const token = getAuthToken()
+    const socketUrl = (import.meta.env.VITE_SOCKET_URL as string | undefined) || `${window.location.protocol}//${window.location.hostname}:4003`
+    const socket = io(`${socketUrl}/ws/chat`, { auth: { token }, transports: ['websocket'] })
+
+    socket.on('connect', () => socket.emit('joinConversation', { conversationId: selectedId }))
+    socket.on('message:new', (message: ChatMessage) => {
+      if (message.conversationId === selectedId) {
+        setMessages((current) => (current.some((item) => item.id === message.id) ? current : [...current, message]))
+        markConversationRead(selectedId).catch(() => undefined)
+      }
+      void fetchChatConversations().then(setConversations).catch(() => undefined)
+    })
+
+    return () => { socket.disconnect() }
+  }, [isAuthenticated, selectedId])
 
   const selectedConversation = conversations.find((conversation) => conversation.id === selectedId) ?? null
 
@@ -2795,7 +2874,32 @@ function CustomerMessagesPage() {
         setMessageLoading(false)
         markConversationRead(selectedId).catch(() => undefined)
       })
-  }, [selectedId])
+
+    const reconcileTimer = window.setInterval(() => {
+      void fetchChatConversations().then(setConversations).catch(() => undefined)
+    }, 60_000)
+
+    return () => window.clearInterval(reconcileTimer)
+  }, [selectedId, isAuthenticated])
+
+  useEffect(() => {
+    if (!selectedId || !isAuthenticated || !getAuthToken()) return
+
+    const token = getAuthToken()
+    const socketUrl = (import.meta.env.VITE_SOCKET_URL as string | undefined) || `${window.location.protocol}//${window.location.hostname}:4003`
+    const socket = io(`${socketUrl}/ws/chat`, { auth: { token }, transports: ['websocket'] })
+
+    socket.on('connect', () => socket.emit('joinConversation', { conversationId: selectedId }))
+    socket.on('message:new', (message: ChatMessage) => {
+      if (message.conversationId === selectedId) {
+        setMessages((current) => (current.some((item) => item.id === message.id) ? current : [...current, message]))
+        markConversationRead(selectedId).catch(() => undefined)
+      }
+      void fetchChatConversations().then(setConversations).catch(() => undefined)
+    })
+
+    return () => { socket.disconnect() }
+  }, [selectedId, isAuthenticated])
 
   const selectedConversation = conversations.find((conversation) => conversation.id === selectedId) ?? null
 
@@ -2957,6 +3061,7 @@ function Field({
   value,
   type = 'text',
   autoComplete,
+  inputMode,
   required = false,
   onChange,
 }: {
@@ -2965,6 +3070,7 @@ function Field({
   value?: string
   type?: string
   autoComplete?: string
+  inputMode?: React.HTMLAttributes<HTMLInputElement>['inputMode']
   required?: boolean
   onChange?: (value: string) => void
 }) {
@@ -2974,6 +3080,7 @@ function Field({
       <input
         type={type}
         autoComplete={autoComplete}
+        inputMode={inputMode}
         value={value ?? ''}
         onChange={(event) => onChange?.(event.target.value)}
         placeholder={placeholder}

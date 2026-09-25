@@ -3,14 +3,19 @@ import type { FormEvent } from 'react'
 import { AdminLayout } from '../../layouts/AdminLayout'
 import { createAdminBrand, deleteAdminBrand, getAdminBrands, updateAdminBrand } from '../../services/adminApi'
 
-type Brand = { id: string; name: string; slug: string; logo: string | null; status: string; productCount: number }
-type BrandForm = Omit<Brand, 'id' | 'productCount'>
+type CatalogPreview = { id: string; name: string; image: string | null; status: string }
+type Brand = { id: string; name: string; slug: string; logo: string | null; status: string; productCount: number; products: CatalogPreview[] }
+type BrandForm = Omit<Brand, 'id' | 'productCount' | 'products'>
 const emptyForm: BrandForm = { name: '', slug: '', logo: '', status: 'ACTIVE' }
 const fieldClass = 'w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-indigo-400 focus:bg-white focus:ring-4 focus:ring-indigo-500/10'
 
+function brandFallback(name: string) {
+  return `https://placehold.co/160x160/eef2ff/102451?text=${encodeURIComponent(name.slice(0, 12) || 'Brand')}`
+}
+
 function normalizeBrands(payload: unknown): Brand[] {
   const source = Array.isArray(payload) ? payload : payload && typeof payload === 'object' && Array.isArray((payload as { items?: unknown }).items) ? (payload as { items: unknown[] }).items : []
-  return source.map((item) => { const value = item as Partial<Brand>; return { id: String(value.id ?? ''), name: String(value.name ?? 'Unnamed brand'), slug: String(value.slug ?? ''), logo: value.logo ?? null, status: String(value.status ?? 'ACTIVE').toUpperCase(), productCount: Number(value.productCount ?? 0) } })
+  return source.map((item) => { const value = item as Partial<Brand>; const name = String(value.name ?? 'Unnamed brand'); return { id: String(value.id ?? ''), name, slug: String(value.slug ?? ''), logo: value.logo ?? brandFallback(name), status: String(value.status ?? 'ACTIVE').toUpperCase(), productCount: Number(value.productCount ?? 0), products: Array.isArray(value.products) ? value.products.map((product) => ({ id: String(product.id ?? ''), name: String(product.name ?? 'Product'), image: product.image ?? null, status: String(product.status ?? 'PUBLISHED') })) : [] } })
 }
 
 export function BrandsPage() {

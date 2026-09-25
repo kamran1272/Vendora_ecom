@@ -2,16 +2,35 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException }
 import { PrismaService } from '@/database/prisma.service';
 import { Prisma } from '@prisma/client';
 import { DummyJsonProvider } from './providers/dummyjson.provider';
+import { FakeStoreApiProvider } from './providers/fake-store.provider';
+import { EscuelaJsProvider } from './providers/escuelajs.provider';
 import type { NormalizedExternalProduct, ProductProvider } from './providers/product-provider.interface';
 
 const unlimited = (limit: number) => limit < 0;
+
+const fallbackProductImages: Record<string, string[]> = {
+  electronics: ['https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=900&q=85'],
+  fashion: ['https://images.unsplash.com/photo-1553062407-98eeb64c6a62?auto=format&fit=crop&w=900&q=85'],
+  'home-and-living': ['https://images.unsplash.com/photo-1507473885765-e6ed057f782c?auto=format&fit=crop&w=900&q=85'],
+  wellness: ['https://images.unsplash.com/photo-1602143407151-7111542de6e8?auto=format&fit=crop&w=900&q=85'],
+  default: ['https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=900&q=85'],
+};
 
 @Injectable()
 export class ProductWarehouseService {
   private readonly providers: Map<string, ProductProvider>;
 
-  constructor(private readonly prisma: PrismaService, dummyJsonProvider: DummyJsonProvider) {
-    this.providers = new Map([[dummyJsonProvider.id, dummyJsonProvider]]);
+  constructor(
+    private readonly prisma: PrismaService,
+    dummyJsonProvider: DummyJsonProvider,
+    fakeStoreApiProvider: FakeStoreApiProvider,
+    escuelaJsProvider: EscuelaJsProvider,
+  ) {
+    this.providers = new Map([
+      [dummyJsonProvider.id, dummyJsonProvider],
+      [fakeStoreApiProvider.id, fakeStoreApiProvider],
+      [escuelaJsProvider.id, escuelaJsProvider],
+    ]);
   }
 
   private parseImages(images: string | null) {
@@ -165,7 +184,10 @@ export class ProductWarehouseService {
 
   private toMarketplaceProduct(product: any, listing?: any) {
     const warehouse = listing?.warehouseProduct ?? product;
-    const imageList = Array.isArray(warehouse.images) ? warehouse.images : this.parseImages(warehouse.images);
+    const imageList = (Array.isArray(warehouse.images) ? warehouse.images : this.parseImages(warehouse.images))
+      .filter((image: unknown): image is string => typeof image === 'string' && image.trim().length > 0 && !image.includes('images.example.com'));
+    const categoryKey = String(warehouse.category ?? 'default').toLowerCase().replace(/\s*&\s*/g, '-and-').replace(/\s+/g, '-');
+    const images = imageList.length ? imageList : (fallbackProductImages[categoryKey] ?? fallbackProductImages.default);
     return {
       id: listing?.id ?? warehouse.id,
       warehouseProductId: warehouse.id,
@@ -184,7 +206,7 @@ export class ProductWarehouseService {
       attributes: Array.isArray(warehouse.attributes) ? warehouse.attributes : ['featured'],
       badge: warehouse.badge ?? null,
       description: warehouse.description ?? '',
-      images: imageList,
+      images,
       stock: Number(warehouse.stock ?? 0),
       sellerId: listing?.sellerId ?? null,
     };
@@ -395,12 +417,15 @@ export class ProductWarehouseService {
   }
 
   async deleteWarehouseProduct(id: string) {
-    const assignments = await this.prisma.sellerProduct.count({ where: { warehouseProductId: id } });
-    if (assignments > 0) {
-      throw new BadRequestException('This warehouse product is assigned to sellers. Deactivate it instead of deleting it.');
-    }
-    await this.prisma.warehouseProduct.delete({ where: { id } });
-    return { message: 'Warehouse product deleted successfully.' };
+    const product = await this.prisma.warehouseProduct.findUnique({ where: { id } });
+    if (!product) throw new BadRequestException('Warehouse product not found.');
+
+    await this.prisma.$transaction([
+      this.prisma.warehouseProduct.update({ where: { id }, data: { status: 'ARCHIVED' } }),
+      this.prisma.sellerProduct.updateMany({ where: { warehouseProductId: id }, data: { status: 'INACTIVE' } }),
+    ]);
+
+    return { message: 'Warehouse product archived and seller listings deactivated.', id };
   }
 
   private async getPlan(sellerId: string, tx: Prisma.TransactionClient | PrismaService = this.prisma) {

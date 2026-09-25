@@ -55,7 +55,7 @@ export function AdminHeaderUserMenu() {
       </button>
 
       {open ? (
-        <div className="absolute right-0 z-50 mt-3 w-[min(288px,calc(100vw-1.5rem))] overflow-hidden rounded-2xl border border-slate-200 bg-white p-2 shadow-[0_20px_50px_rgba(15,23,42,0.14)]">
+        <div className="admin-profile-menu absolute right-0 z-[100] mt-3 w-[min(288px,calc(100vw-1.5rem))] overflow-hidden rounded-2xl border border-slate-200 bg-white p-2 shadow-[0_20px_50px_rgba(15,23,42,0.16)]">
           <div className="rounded-xl bg-slate-50 px-3 py-3">
             <p className="text-sm font-semibold text-slate-900">{adminUser.name}</p>
             <p className="text-xs text-slate-500">{adminUser.email}</p>

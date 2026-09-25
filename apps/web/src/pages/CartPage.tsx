@@ -7,6 +7,7 @@ import { getCartSubtotal, useCartStore } from '@/store/cart'
 import { useAuth } from '@/store/auth'
 import { useToastStore } from '@/store/toast'
 import { formatCurrency } from '@/utils/format'
+import { resolveProductImageUrl } from '@/utils/productImage'
 
 export function CartPage() {
   const navigate = useNavigate()
@@ -80,7 +81,7 @@ export function CartPage() {
                 <div key={item.id} className="rounded-2xl bg-slate-50 p-5">
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex min-w-0 items-start gap-3">
-                      {item.imageUrl ? <img src={item.imageUrl} alt="" className="h-16 w-16 shrink-0 rounded-xl object-cover" /> : <div className="h-16 w-16 shrink-0 rounded-xl bg-slate-200" aria-hidden="true" />}
+                      {item.imageUrl ? <img src={resolveProductImageUrl(item.imageUrl)} alt="" className="h-16 w-16 shrink-0 rounded-xl object-cover" /> : <div className="h-16 w-16 shrink-0 rounded-xl bg-slate-200" aria-hidden="true" />}
                       <div>
                         <p className="text-lg font-bold text-slate-900">{item.name}</p>
                         <p className="mt-1 text-sm text-slate-500">{item.shop || 'Seller information unavailable'}</p>

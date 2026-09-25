@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { api, persistSellerRefreshToken, persistSellerSession } from '../../services/api'
+import { BrandLogo } from '../../components/BrandLogo'
 
 type Mode = 'login' | 'register'
 
@@ -14,10 +15,7 @@ type SellerUser = {
 
 type AuthResponse = {
   accessToken?: string
-  access_token?: string
-  token?: string
   refreshToken?: string
-  refresh_token?: string
   user?: SellerUser
   message?: string
 }
@@ -109,7 +107,7 @@ export function SellerAuthPage() {
         password: form.password,
       })
 
-      const token = data.accessToken || data.access_token || data.token
+      const token = data.accessToken
       if (!token) {
         throw new Error('Authentication token was not returned by the server.')
       }
@@ -120,7 +118,7 @@ export function SellerAuthPage() {
       }
 
       persistSellerSession(token, user)
-      persistSellerRefreshToken(data.refreshToken || data.refresh_token)
+      persistSellerRefreshToken(data.refreshToken)
       navigate('/seller/dashboard', { replace: true })
     } catch (submitError: any) {
       const message =
@@ -135,16 +133,15 @@ export function SellerAuthPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#edf3f8] p-4 text-slate-800 md:p-8">
-      <div className="mx-auto max-w-6xl overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_18px_60px_rgba(15,23,42,0.08)]">
+    <main className="min-h-screen bg-[#f4f6fb] p-4 text-slate-800 md:p-8">
+      <div className="mx-auto max-w-6xl overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-[0_24px_80px_rgba(16,36,81,0.12)]">
         <div className="grid lg:min-h-[760px] lg:grid-cols-[1.08fr_0.92fr]">
-          <section className="relative hidden overflow-hidden bg-[#0f172a] p-8 text-white lg:flex lg:flex-col lg:justify-between">
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.35),transparent_42%),radial-gradient(circle_at_bottom_right,_rgba(14,165,233,0.25),transparent_38%)]" />
+          <section className="relative hidden overflow-hidden bg-[#102451] p-10 text-white lg:flex lg:flex-col lg:justify-between">
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(255,157,19,0.2),transparent_42%),radial-gradient(circle_at_bottom_right,_rgba(54,93,167,0.4),transparent_38%)]" />
 
             <div className="relative z-10">
-              <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.24em] text-sky-100">
-                Vendora seller hub
-              </div>
+              <BrandLogo className="rounded-lg bg-white px-3 py-2" />
+              <p className="mt-12 text-xs font-bold uppercase tracking-[0.24em] text-orange-300">Seller workspace</p>
 
               <h1 className="mt-8 max-w-md text-4xl font-black leading-tight">
                 Grow your store with a trusted marketplace.
@@ -162,7 +159,7 @@ export function SellerAuthPage() {
                 'Secure access across all marketplace tools',
               ].map((point) => (
                 <div key={point} className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/5 p-3 backdrop-blur-sm">
-                  <div className="mt-0.5 flex h-7 w-7 items-center justify-center rounded-full bg-sky-500/20 text-sm text-sky-200">
+                  <div className="mt-0.5 flex h-7 w-7 items-center justify-center rounded-full bg-orange-400/20 text-sm text-orange-200">
                     ✓
                   </div>
                   <p className="text-sm text-slate-100">{point}</p>
@@ -178,7 +175,8 @@ export function SellerAuthPage() {
                   <div className="text-[10px] font-semibold uppercase tracking-[0.26em] text-slate-500">
                     Marketplace access
                   </div>
-                  <h2 className="mt-2 text-3xl font-black tracking-tight text-slate-900">{formTitle}</h2>
+                  <BrandLogo compact />
+                  <h2 className="mt-5 text-3xl font-black tracking-tight text-slate-900">{formTitle}</h2>
                 </div>
 
                 <div className="inline-flex rounded-full border border-slate-200 bg-white p-1 shadow-sm">
@@ -201,7 +199,7 @@ export function SellerAuthPage() {
                       navigate('/users/registration', { replace: false })
                     }}
                     className={`rounded-full px-3 py-1.5 text-sm font-medium transition ${
-                      mode === 'register' ? 'bg-sky-600 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                      mode === 'register' ? 'bg-[#ff7612] text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
                     }`}
                   >
                     Register
@@ -224,7 +222,7 @@ export function SellerAuthPage() {
                         required
                         value={form.fullName}
                         onChange={(event) => updateField('fullName', event.target.value)}
-                        className="w-full rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-sm outline-none transition focus:border-sky-500 focus:ring-4 focus:ring-sky-100"
+                        className="w-full rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-sm outline-none transition focus:border-[#ff7612] focus:ring-4 focus:ring-orange-100"
                         placeholder="Your name"
                       />
                     </label>
@@ -235,7 +233,7 @@ export function SellerAuthPage() {
                         required
                         value={form.shopName}
                         onChange={(event) => updateField('shopName', event.target.value)}
-                        className="w-full rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-sm outline-none transition focus:border-sky-500 focus:ring-4 focus:ring-sky-100"
+                        className="w-full rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-sm outline-none transition focus:border-[#ff7612] focus:ring-4 focus:ring-orange-100"
                         placeholder="Your storefront name"
                       />
                     </label>
@@ -246,7 +244,7 @@ export function SellerAuthPage() {
                         required
                         value={form.shopAddress}
                         onChange={(event) => updateField('shopAddress', event.target.value)}
-                        className="w-full rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-sm outline-none transition focus:border-sky-500 focus:ring-4 focus:ring-sky-100"
+                        className="w-full rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-sm outline-none transition focus:border-[#ff7612] focus:ring-4 focus:ring-orange-100"
                         placeholder="Street, city, country"
                       />
                     </label>
@@ -257,7 +255,7 @@ export function SellerAuthPage() {
                         <input
                           value={form.phone}
                           onChange={(event) => updateField('phone', event.target.value)}
-                          className="w-full rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-sm outline-none transition focus:border-sky-500 focus:ring-4 focus:ring-sky-100"
+                          className="w-full rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-sm outline-none transition focus:border-[#ff7612] focus:ring-4 focus:ring-orange-100"
                           placeholder="+1"
                         />
                       </label>
@@ -269,7 +267,7 @@ export function SellerAuthPage() {
                           type="email"
                           value={form.email}
                           onChange={(event) => updateField('email', event.target.value)}
-                          className="w-full rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-sm outline-none transition focus:border-sky-500 focus:ring-4 focus:ring-sky-100"
+                          className="w-full rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-sm outline-none transition focus:border-[#ff7612] focus:ring-4 focus:ring-orange-100"
                           placeholder="seller@company.com"
                         />
                       </label>
@@ -285,7 +283,7 @@ export function SellerAuthPage() {
                       type="email"
                       value={form.email}
                       onChange={(event) => updateField('email', event.target.value)}
-                      className="w-full rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-sm outline-none transition focus:border-sky-500 focus:ring-4 focus:ring-sky-100"
+                      className="w-full rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-sm outline-none transition focus:border-[#ff7612] focus:ring-4 focus:ring-orange-100"
                       placeholder="seller@company.com"
                     />
                   </label>
@@ -300,7 +298,7 @@ export function SellerAuthPage() {
                     type="password"
                     value={form.password}
                     onChange={(event) => updateField('password', event.target.value)}
-                    className="w-full rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-sm outline-none transition focus:border-sky-500 focus:ring-4 focus:ring-sky-100"
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-sm outline-none transition focus:border-[#ff7612] focus:ring-4 focus:ring-orange-100"
                     placeholder="••••••••"
                   />
                 </label>
@@ -313,7 +311,7 @@ export function SellerAuthPage() {
                       type="password"
                       value={form.confirmPassword}
                       onChange={(event) => updateField('confirmPassword', event.target.value)}
-                      className="w-full rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-sm outline-none transition focus:border-sky-500 focus:ring-4 focus:ring-sky-100"
+                      className="w-full rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-sm outline-none transition focus:border-[#ff7612] focus:ring-4 focus:ring-orange-100"
                       placeholder="Repeat the password"
                     />
                   </label>
@@ -325,7 +323,7 @@ export function SellerAuthPage() {
                       type="checkbox"
                       checked={accepted}
                       onChange={(event) => setAccepted(event.target.checked)}
-                      className="mt-1 h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500"
+                      className="mt-1 h-4 w-4 rounded border-slate-300 text-[#ff7612] focus:ring-orange-500"
                     />
                     <span className="text-sm leading-6 text-slate-600">
                       I agree to the seller terms, marketplace rules, and payout policy.
@@ -348,7 +346,7 @@ export function SellerAuthPage() {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="flex w-full items-center justify-center rounded-2xl bg-sky-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="flex w-full items-center justify-center rounded-2xl bg-[#102451] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#1a3268] disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {loading
                     ? isRegister
@@ -363,7 +361,7 @@ export function SellerAuthPage() {
               {!isRegister && (
                 <div className="mt-6 text-center text-sm text-slate-500">
                   Need a seller account?{' '}
-                  <Link to="/users/registration" className="font-semibold text-sky-600 hover:text-sky-700">
+                  <Link to="/users/registration" className="font-semibold text-[#d97706] hover:text-[#ff7612]">
                     Register here
                   </Link>
                 </div>

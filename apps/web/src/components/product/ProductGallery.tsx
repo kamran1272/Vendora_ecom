@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { resolveProductImageUrl } from '@/utils/productImage'
 
 type ProductGalleryProps = {
   title: string
@@ -10,7 +11,7 @@ export function ProductGallery({ title, images }: ProductGalleryProps) {
   const [zoomed, setZoomed] = useState(false)
   const [imageLoading, setImageLoading] = useState(true)
   const [failedImages, setFailedImages] = useState<Set<number>>(new Set())
-  const availableImages = (images ?? []).filter(Boolean)
+  const availableImages = (images ?? []).map((image) => resolveProductImageUrl(image)).filter(Boolean)
   const imageCount = availableImages.length
 
   const moveImage = (direction: number) => {

@@ -25,6 +25,8 @@ export class CartController {
       name: data.name,
       price: data.price,
       sellerId: data.sellerId,
+      variantId: data.variantId,
+      variantSku: data.variantSku,
     }, data.quantity ?? 1);
   }
 

@@ -1,9 +1,13 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable } from '@nestjs/common';
+import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { compare, hash } from 'bcrypt';
 import { PrismaService } from '@/database/prisma.service';
 import { NotificationsService } from '@/notifications/notifications.service';
-import { unlink } from 'fs/promises';
-import { resolve } from 'path';
+import { getMarketplaceCommissionConfig } from '@/config/marketplace-commission.config';
+import { unlink, writeFile } from 'fs/promises';
+import { randomUUID } from 'crypto';
+import { extname, resolve } from 'path';
 
 @Injectable()
 export class SellersService {
@@ -743,6 +747,43 @@ export class SellersService {
     }));
   }
 
+  private getObjectStorageConfig() {
+    const accessKeyId = process.env.AWS_ACCESS_KEY_ID?.trim();
+    const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY?.trim();
+    const bucket = process.env.AWS_S3_BUCKET?.trim();
+    const region = process.env.AWS_S3_REGION?.trim() || 'us-east-1';
+    const endpoint = process.env.AWS_S3_ENDPOINT?.trim();
+    const forcePathStyle = (process.env.AWS_S3_FORCE_PATH_STYLE ?? 'true').toLowerCase() === 'true';
+    const enabled = Boolean(bucket && (accessKeyId || endpoint));
+    return { enabled, bucket, region, endpoint, accessKeyId, secretAccessKey, forcePathStyle };
+  }
+
+  private async uploadToObjectStorage(sellerId: string, file: { originalname: string; mimetype: string; size: number; buffer: Buffer }) {
+    const storage = this.getObjectStorageConfig();
+    if (!storage.enabled || !storage.bucket) {
+      throw new BadRequestException('Object storage is not configured.');
+    }
+
+    const client = new S3Client({
+      region: storage.region,
+      endpoint: storage.endpoint || undefined,
+      forcePathStyle: storage.forcePathStyle,
+      credentials: storage.accessKeyId && storage.secretAccessKey ? { accessKeyId: storage.accessKeyId, secretAccessKey: storage.secretAccessKey } : undefined,
+    });
+
+    const key = `sellers/${sellerId}/${Date.now()}-${randomUUID()}${extname(file.originalname).toLowerCase()}`;
+    await client.send(new PutObjectCommand({
+      Bucket: storage.bucket,
+      Key: key,
+      Body: file.buffer,
+      ContentType: file.mimetype,
+      ACL: 'private',
+    }));
+
+    const remoteUrl = await getSignedUrl(client, new GetObjectCommand({ Bucket: storage.bucket, Key: key }), { expiresIn: 3600 });
+    return { storedName: key, url: remoteUrl };
+  }
+
   async getSellerUploads(userId: string | number, query: { page?: string | number; limit?: string | number; search?: string; type?: string }) {
     const seller = await this.prisma.seller.findUnique({ where: { userId: String(userId) } });
     if (!seller) throw new BadRequestException('Seller profile not found.');
@@ -760,26 +801,72 @@ export class SellersService {
     return { items, page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)), types: types.map((item) => item.mimeType) };
   }
 
-  async createSellerUpload(userId: string | number, file: { originalname: string; filename: string; mimetype: string; size: number }) {
+  async createSellerUpload(userId: string | number, file: { originalname: string; filename?: string; mimetype: string; size: number; buffer?: Buffer }) {
     const seller = await this.prisma.seller.findUnique({ where: { userId: String(userId) } });
     if (!seller) throw new BadRequestException('Seller profile not found.');
-    const publicUrl = `${process.env.API_PUBLIC_URL || 'http://127.0.0.1:4003'}/api/seller/uploads/file/${file.filename}`;
-    return this.prisma.uploadedFile.create({ data: { sellerId: seller.id, filename: file.originalname, storedName: file.filename, mimeType: file.mimetype, size: file.size, url: publicUrl } });
+
+    const storage = this.getObjectStorageConfig();
+    if (!storage.enabled || !storage.bucket) {
+      throw new BadRequestException('S3-compatible object storage is not configured. Set AWS_S3_BUCKET and related credentials before uploading files.');
+    }
+
+    const upload = await this.uploadToObjectStorage(seller.id, {
+      originalname: file.originalname,
+      mimetype: file.mimetype,
+      size: file.size,
+      buffer: file.buffer || Buffer.alloc(0),
+    });
+
+    return this.prisma.uploadedFile.create({
+      data: {
+        sellerId: seller.id,
+        filename: file.originalname,
+        storedName: upload.storedName,
+        mimeType: file.mimetype,
+        size: file.size,
+        url: upload.url,
+      },
+    });
   }
 
-  async getSellerUploadPath(userId: string | number, storedName: string) {
+  async getSellerUpload(userId: string | number, storedName: string) {
     const seller = await this.prisma.seller.findUnique({ where: { userId: String(userId) }, select: { id: true } });
     const file = seller ? await this.prisma.uploadedFile.findFirst({ where: { sellerId: seller.id, storedName } }) : null;
     if (!file) throw new BadRequestException('Uploaded file not found.');
-    return resolve(__dirname, '../uploads', file.storedName);
+
+    const isRemote = /^https?:\/\//i.test(file.url);
+    if (isRemote) return { url: file.url, path: undefined };
+    if (process.env.NODE_ENV === 'production') {
+      throw new BadRequestException('This upload is not stored in production object storage.');
+    }
+    return { path: resolve(__dirname, '../uploads', file.storedName), url: undefined };
+  }
+
+  async getSellerUploadPath(userId: string | number, storedName: string) {
+    const upload = await this.getSellerUpload(userId, storedName);
+    if (upload.path) return upload.path;
+    return upload.url as string;
   }
 
   async deleteSellerUpload(userId: string | number, id: string) {
     const seller = await this.prisma.seller.findUnique({ where: { userId: String(userId) } });
     const file = seller ? await this.prisma.uploadedFile.findFirst({ where: { id, sellerId: seller.id } }) : null;
     if (!file) throw new BadRequestException('Uploaded file not found.');
+
+    const storage = this.getObjectStorageConfig();
+    if (storage.enabled && storage.bucket && /^https?:\/\//i.test(file.url)) {
+      const client = new S3Client({
+        region: storage.region,
+        endpoint: storage.endpoint || undefined,
+        forcePathStyle: storage.forcePathStyle,
+        credentials: storage.accessKeyId && storage.secretAccessKey ? { accessKeyId: storage.accessKeyId, secretAccessKey: storage.secretAccessKey } : undefined,
+      });
+      await client.send(new DeleteObjectCommand({ Bucket: storage.bucket, Key: file.storedName }));
+    } else if (process.env.NODE_ENV !== 'production') {
+      await unlink(resolve(__dirname, '../uploads', file.storedName)).catch(() => undefined);
+    }
+
     await this.prisma.uploadedFile.delete({ where: { id: file.id } });
-    await unlink(resolve(__dirname, '../uploads', file.storedName)).catch(() => undefined);
     return { success: true, message: 'File deleted successfully.' };
   }
 
@@ -795,12 +882,32 @@ export class SellersService {
     if (query.from || query.to) where.createdAt = { ...(query.from ? { gte: new Date(`${query.from}T00:00:00.000Z`) } : {}), ...(query.to ? { lte: new Date(`${query.to}T23:59:59.999Z`) } : {}) };
     if (search) where.OR = [{ text: { contains: search } }, { title: { contains: search } }, { customer: { name: { contains: search } } }, { warehouseProduct: { name: { contains: search } } }];
     const [reviews, total, products] = await Promise.all([
-      this.prisma.review.findMany({ where, include: { customer: true, warehouseProduct: true, replies: { include: { author: true }, orderBy: { createdAt: 'asc' } }, reports: true }, orderBy: { createdAt: 'desc' }, skip: (page - 1) * limit, take: limit }),
+      this.prisma.review.findMany({
+        where,
+        select: {
+          id: true,
+          customerId: true,
+          productId: true,
+          warehouseProductId: true,
+          rating: true,
+          title: true,
+          text: true,
+          status: true,
+          createdAt: true,
+          customer: { select: { id: true, name: true, email: true } },
+          warehouseProduct: { select: { name: true } },
+          replies: { select: { id: true, authorId: true, text: true, createdAt: true, author: { select: { name: true } } }, orderBy: { createdAt: 'asc' } },
+          reports: { select: { id: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
       this.prisma.review.count({ where }),
       this.prisma.review.findMany({ where: { sellerId: seller.id }, distinct: ['warehouseProductId'], select: { warehouseProductId: true, warehouseProduct: { select: { name: true } } } }),
     ]);
     return {
-      items: reviews.map((review) => ({ id: review.id, customer: { id: review.customerId, name: review.customer.name, email: review.customer.email }, product: { id: review.warehouseProductId || review.productId || '', name: review.warehouseProduct?.name || 'Product' }, rating: review.rating, title: review.title, text: review.text, images: JSON.parse(review.images || '[]'), date: review.createdAt, status: review.status, replies: review.replies.map((reply) => ({ id: reply.id, authorId: reply.authorId, authorName: reply.author.name, text: reply.text, date: reply.createdAt, isSeller: reply.authorId === String(userId) })), reportCount: review.reports.length })),
+      items: reviews.map((review) => ({ id: review.id, customer: { id: review.customerId, name: review.customer.name, email: review.customer.email }, product: { id: review.warehouseProductId || review.productId || '', name: review.warehouseProduct?.name || 'Product' }, rating: review.rating, title: review.title, text: review.text, images: [], date: review.createdAt, status: review.status, replies: review.replies.map((reply) => ({ id: reply.id, authorId: reply.authorId, authorName: reply.author.name, text: reply.text, date: reply.createdAt, isSeller: reply.authorId === String(userId) })), reportCount: review.reports.length })),
       products: products.filter((product) => product.warehouseProductId).map((product) => ({ id: product.warehouseProductId as string, name: product.warehouseProduct?.name || 'Product' })),
       page,
       limit,
@@ -857,9 +964,23 @@ export class SellersService {
   }
 
   async createSellerProduct(userId: number | string, payload: any) {
-    void userId;
-    void payload;
-    throw new BadRequestException('Seller products must be added from the warehouse storehouse.');
+    const seller = await this.prisma.seller.findUnique({ where: { userId: String(userId) }, include: { shop: { select: { id: true } } } });
+    if (!seller || String(seller.status).toUpperCase() !== 'ACTIVE' || !seller.shop) throw new BadRequestException('Active seller shop not found.');
+    const warehouseProductId = String(payload?.warehouseProductId || '').trim();
+    if (!warehouseProductId) throw new BadRequestException('Select a warehouse product before creating a seller listing.');
+    const warehouseProduct = await this.prisma.warehouseProduct.findFirst({ where: { id: warehouseProductId, status: 'PUBLISHED' } });
+    if (!warehouseProduct) throw new BadRequestException('Warehouse product not found or is not published.');
+    const existing = await this.prisma.sellerProduct.findUnique({ where: { sellerId_warehouseProductId: { sellerId: seller.id, warehouseProductId } } });
+    if (existing) throw new ConflictException('This warehouse product is already in your seller catalog.');
+    const sellingPrice = Number(payload?.salePrice ?? payload?.price ?? warehouseProduct.basePrice);
+    const sellerMargin = Number(payload?.sellerMargin ?? 0);
+    if (!Number.isFinite(sellingPrice) || sellingPrice < 0) throw new BadRequestException('Selling price cannot be negative.');
+    if (!Number.isFinite(sellerMargin) || sellerMargin < 0) throw new BadRequestException('Seller margin cannot be negative.');
+    const listing = await this.prisma.sellerProduct.create({
+      data: { sellerId: seller.id, shopId: seller.shop.id, warehouseProductId, sellingPrice, sellerMargin, status: payload?.status === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE' },
+      include: { warehouseProduct: true },
+    });
+    return { message: 'Seller product listing created successfully.', product: listing };
   }
 
   async updateSellerProduct(id: string | number, userId: string | number, payload: any) {
@@ -881,7 +1002,7 @@ export class SellersService {
     if (!seller || String(seller.status).toUpperCase() !== 'ACTIVE' || !seller.shop || !payload.ids?.length) throw new BadRequestException('An active seller shop and at least one product are required.');
     const products = await this.prisma.sellerProduct.findMany({ where: { sellerId: seller.id, shopId: seller.shop.id, id: { in: payload.ids } } });
     if (products.length !== payload.ids.length) throw new BadRequestException('One or more products do not belong to this seller.');
-    if (payload.action === 'delete') await this.prisma.sellerProduct.deleteMany({ where: { sellerId: seller.id, shopId: seller.shop.id, id: { in: payload.ids } } });
+    if (payload.action === 'delete') await this.prisma.sellerProduct.updateMany({ where: { sellerId: seller.id, shopId: seller.shop.id, id: { in: payload.ids } }, data: { status: 'INACTIVE' } });
     else if (payload.action === 'stock') throw new BadRequestException('Warehouse stock is managed by marketplace administrators.');
     else await this.prisma.sellerProduct.updateMany({ where: { sellerId: seller.id, shopId: seller.shop.id, id: { in: payload.ids } }, data: { status: payload.action === 'activate' ? 'ACTIVE' : 'INACTIVE' } });
     return { success: true, updated: payload.ids.length };
@@ -893,8 +1014,8 @@ export class SellersService {
     const product = await this.prisma.sellerProduct.findFirst({ where: { id: String(id), sellerId: seller.id, shopId: seller.shop.id } });
     if (!product) throw new BadRequestException('Product not found.');
 
-    await this.prisma.sellerProduct.delete({ where: { id: product.id } });
-    return { message: 'Product deleted', product };
+    const archived = await this.prisma.sellerProduct.update({ where: { id: product.id }, data: { status: 'INACTIVE' } });
+    return { message: 'Product deactivated and preserved for order history.', product: archived };
   }
 
   async getProductStorehouse(userId: string | number) {
@@ -1304,7 +1425,8 @@ export class SellersService {
 
     const sellerOrders = await this.getSellerOrdersForSeller(seller.id);
     const grossSales = sellerOrders.reduce((sum, order) => sum + Number(order.total || 0), 0);
-    const platformCommission = grossSales * 0.1;
+    const commissionConfig = getMarketplaceCommissionConfig();
+    const platformCommission = grossSales * (commissionConfig.marketplaceCommissionRate / 100);
     const netEarnings = grossSales - platformCommission;
 
     return {

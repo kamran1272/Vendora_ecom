@@ -44,8 +44,8 @@ export class AuthController {
   }
 
   @Post('google')
-  async googleLogin(@Body() googleProfile: any) {
-    return this.authService.googleLogin(googleProfile);
+  async googleLogin(@Body() credentials: { idToken?: string }) {
+    return this.authService.googleLogin(credentials);
   }
 
   @Throttle({ default: { limit: 10, ttl: 60000 } })
@@ -54,9 +54,9 @@ export class AuthController {
     return this.authService.refreshToken(body.refreshToken);
   }
 
-  @Post('verify-email')
-  async verifyEmail(@Body() body: { userId: number }) {
-    return this.authService.verifyEmail(body.userId);
+  @Get('verify-email/:token')
+  async verifyEmail(@Param('token') token: string) {
+    return this.authService.verifyEmail(token);
   }
 
   @Throttle({ default: { limit: 10, ttl: 60000 } })
@@ -69,6 +69,24 @@ export class AuthController {
   @Post('reset-password')
   async resetPassword(@Body() body: { token: string; newPassword: string }) {
     return this.authService.resetPassword(body.token, body.newPassword);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('2fa/setup')
+  async setupTwoFactor(@Req() req: any) {
+    return this.authService.setupTwoFactor(req.user.userId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('2fa/enable')
+  async enableTwoFactor(@Req() req: any, @Body() body: { code: string }) {
+    return this.authService.enableTwoFactor(req.user.userId, body.code);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('2fa/disable')
+  async disableTwoFactor(@Req() req: any, @Body() body: { code: string }) {
+    return this.authService.disableTwoFactor(req.user.userId, body.code);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -107,11 +125,10 @@ export class AuthController {
     return this.authService.getOrders(req.user.userId);
   }
 
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.SELLER)
+  @UseGuards(JwtAuthGuard)
   @Post('seller/apply')
-  async applySellerAccount(@Req() req: any, @Body() body: { shopName: string }) {
-    return this.authService.applySellerAccount(req.user.userId, body.shopName);
+  async applySellerAccount(@Req() req: any, @Body() body: { shopName: string; phone: string }) {
+    return this.authService.applySellerAccount(req.user.userId, body.shopName, body.phone);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
