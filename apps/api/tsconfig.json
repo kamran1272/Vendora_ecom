@@ -24,6 +24,7 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "moduleResolution": "node",
+    "ignoreDeprecations": "5.0",
     "types": ["node"]
   },
   "include": ["src/**/*.ts"],

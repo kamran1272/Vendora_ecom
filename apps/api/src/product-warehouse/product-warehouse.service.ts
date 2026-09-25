@@ -26,7 +26,7 @@ export class ProductWarehouseService {
     fakeStoreApiProvider: FakeStoreApiProvider,
     escuelaJsProvider: EscuelaJsProvider,
   ) {
-    this.providers = new Map([
+    this.providers = new Map<string, ProductProvider>([
       [dummyJsonProvider.id, dummyJsonProvider],
       [fakeStoreApiProvider.id, fakeStoreApiProvider],
       [escuelaJsProvider.id, escuelaJsProvider],

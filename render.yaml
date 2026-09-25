@@ -1,0 +1,31 @@
+services:
+  - type: web
+    name: vendora-api
+    runtime: node
+    plan: starter
+    buildCommand: npm ci --include=dev && npm run build --workspace @vendora/api
+    startCommand: npm run start --workspace @vendora/api
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: HOST
+        value: 0.0.0.0
+      - key: DATABASE_URL
+        value: file:/opt/render/project/src/apps/api/data/production.sqlite
+      - key: DB_TYPE
+        value: sqlite
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false
+      - key: PUBLIC_WEB_URL
+        sync: false
+      - key: ADMIN_INITIAL_EMAIL
+        sync: false
+      - key: ADMIN_INITIAL_PASSWORD
+        sync: false
+    disk:
+      name: vendora-api-data
+      mountPath: /opt/render/project/src/apps/api/data
+      sizeGB: 1

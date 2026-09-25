@@ -1,8 +1,17 @@
 import { Controller, Get } from '@nestjs/common';
 
-@Controller('health')
+@Controller()
 export class HealthController {
   @Get()
+  root() {
+    return {
+      service: 'vendora-api',
+      status: 'ok',
+      health: '/api/health',
+    };
+  }
+
+  @Get('health')
   health() {
     return {
       status: 'ok',
