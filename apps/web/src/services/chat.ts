@@ -1,1 +1,35 @@
-aW1wb3J0IHsgYXBpUmVxdWVzdCB9IGZyb20gJ0Avc2VydmljZXMvYXBpJwoKaW1wb3J0IHR5cGUgeyBDaGF0Q29udmVyc2F0aW9uLCBDaGF0TWVzc2FnZSB9IGZyb20gJ0B2ZW5kb3JhL3NoYXJlZCcKCmV4cG9ydCB0eXBlIHsgQ2hhdENvbnZlcnNhdGlvbiwgQ2hhdE1lc3NhZ2UgfQoKZXhwb3J0IGFzeW5jIGZ1bmN0aW9uIGZldGNoQ2hhdENvbnZlcnNhdGlvbnMoKTogUHJvbWlzZTxDaGF0Q29udmVyc2F0aW9uW10+IHsKICByZXR1cm4gYXBpUmVxdWVzdDxDaGF0Q29udmVyc2F0aW9uW10+KCcvY2hhdC9jb252ZXJzYXRpb25zJykKfQoKZXhwb3J0IGFzeW5jIGZ1bmN0aW9uIGZldGNoQ2hhdE1lc3NhZ2VzKGNvbnZlcnNhdGlvbklkOiBzdHJpbmcsIHBhZ2UgPSAxLCBsaW1pdCA9IDUwKSB7CiAgcmV0dXJuIGFwaVJlcXVlc3Q8eyBkYXRhOiBDaGF0TWVzc2FnZVtdOyBwYWdlOiBudW1iZXI7IGxpbWl0OiBudW1iZXI7IHRvdGFsOiBudW1iZXIgfT4oCiAgICBgL2NoYXQvY29udmVyc2F0aW9ucy8ke2NvbnZlcnNhdGlvbklkfS9tZXNzYWdlcz9wYWdlPSR7cGFnZX0mbGltaXQ9JHtsaW1pdH1gLAogICkKfQoKZXhwb3J0IGFzeW5jIGZ1bmN0aW9uIGNyZWF0ZUNoYXRDb252ZXJzYXRpb24ocGF5bG9hZDogUmVjb3JkPHN0cmluZywgdW5rbm93bj4pIHsKICByZXR1cm4gYXBpUmVxdWVzdDxDaGF0Q29udmVyc2F0aW9uPignL2NoYXQvY29udmVyc2F0aW9ucycsIHsKICAgIG1ldGhvZDogJ1BPU1QnLAogICAgYm9keTogSlNPTi5zdHJpbmdpZnkocGF5bG9hZCksCiAgfSkKfQoKZXhwb3J0IGFzeW5jIGZ1bmN0aW9uIHNlbmRDaGF0TWVzc2FnZShjb252ZXJzYXRpb25JZDogc3RyaW5nLCBwYXlsb2FkOiBSZWNvcmQ8c3RyaW5nLCB1bmtub3duPikgewogIHJldHVybiBhcGlSZXF1ZXN0PENoYXRNZXNzYWdlPihgL2NoYXQvY29udmVyc2F0aW9ucy8ke2NvbnZlcnNhdGlvbklkfS9tZXNzYWdlc2AsIHsKICAgIG1ldGhvZDogJ1BPU1QnLAogICAgYm9keTogSlNPTi5zdHJpbmdpZnkocGF5bG9hZCksCiAgfSkKfQoKZXhwb3J0IGFzeW5jIGZ1bmN0aW9uIG1hcmtDb252ZXJzYXRpb25SZWFkKGNvbnZlcnNhdGlvbklkOiBzdHJpbmcpIHsKICByZXR1cm4gYXBpUmVxdWVzdDx7IGlkOiBzdHJpbmcgfT4oYC9jaGF0L2NvbnZlcnNhdGlvbnMvJHtjb252ZXJzYXRpb25JZH0vcmVhZGAsIHsKICAgIG1ldGhvZDogJ1BPU1QnLAogIH0pCn0K
+import { apiRequest } from '@/services/api'
+
+import type { ChatConversation, ChatMessage } from '@vendora/shared'
+
+export type { ChatConversation, ChatMessage }
+
+export async function fetchChatConversations(): Promise<ChatConversation[]> {
+  return apiRequest<ChatConversation[]>('/chat/conversations')
+}
+
+export async function fetchChatMessages(conversationId: string, page = 1, limit = 50) {
+  return apiRequest<{ data: ChatMessage[]; page: number; limit: number; total: number }>(
+    `/chat/conversations/${conversationId}/messages?page=${page}&limit=${limit}`,
+  )
+}
+
+export async function createChatConversation(payload: Record<string, unknown>) {
+  return apiRequest<ChatConversation>('/chat/conversations', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function sendChatMessage(conversationId: string, payload: Record<string, unknown>) {
+  return apiRequest<ChatMessage>(`/chat/conversations/${conversationId}/messages`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function markConversationRead(conversationId: string) {
+  return apiRequest<{ id: string }>(`/chat/conversations/${conversationId}/read`, {
+    method: 'POST',
+  })
+}
