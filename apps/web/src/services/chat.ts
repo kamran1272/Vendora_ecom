@@ -1,6 +1,8 @@
 import { apiRequest } from '@/services/api'
 
-export type { ChatConversation, ChatMessage } from '@vendora/shared'
+import type { ChatConversation, ChatMessage } from '@vendora/shared'
+
+export type { ChatConversation, ChatMessage }
 
 export async function fetchChatConversations(): Promise<ChatConversation[]> {
   return apiRequest<ChatConversation[]>('/chat/conversations')
